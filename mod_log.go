@@ -135,9 +135,7 @@ type logModel struct {
 	logPath  string // 当前日志文件路径
 
 	// 路径输入模式
-	inputMode   bool   // 是否处于路径输入模式
-	inputValue  string // 当前输入的路径
-	inputCursor int    // 光标位置（字节偏移）
+	input inputModel // 通用输入组件
 
 	// 目录文件列表模式
 	dirListing bool     // 是否在显示目录文件列表
@@ -177,9 +175,8 @@ func (m logModel) Update(msg tea.Msg) (logModel, tea.Cmd) {
 	case logLoadMsg:
 		if msg.err != nil {
 			m.errMsg = msg.err.Error()
-			m.inputMode = true
-			m.inputValue = m.logPath
-			m.inputCursor = runeLen(m.logPath)
+			m.input.prompt = "Log file path:"
+			m.input.Open(m.logPath)
 			return m, nil
 		}
 		lines := msg.lines
@@ -189,7 +186,7 @@ func (m logModel) Update(msg tea.Msg) (logModel, tea.Cmd) {
 		m.all = lines
 		m.filtered = lines
 		m.loaded = true
-		m.inputMode = false
+		m.input.active = false
 		m.dirListing = false
 		m.errMsg = ""
 		m.scroll = len(m.filtered) - (m.height - 8)
@@ -201,7 +198,8 @@ func (m logModel) Update(msg tea.Msg) (logModel, tea.Cmd) {
 	case logDirMsg:
 		if msg.files == nil || len(msg.files) == 0 {
 			m.errMsg = "No .log files found in: " + msg.dir
-			m.inputMode = true
+			m.input.prompt = "Log file path:"
+			m.input.Open(m.dirPath)
 			m.dirListing = false
 			return m, nil
 		}
@@ -209,19 +207,16 @@ func (m logModel) Update(msg tea.Msg) (logModel, tea.Cmd) {
 		m.dirPath = msg.dir
 		m.dirFiles = msg.files
 		m.dirCursor = 0
-		m.inputMode = false
+		m.input.active = false
 		return m, nil
 
 	// 粘贴
 	case tea.PasteMsg:
-		if m.inputMode {
-			// 在光标位置插入粘贴内容
-			m.inputValue = runeInsert(m.inputValue, msg.Content, m.inputCursor)
-			m.inputCursor += runeLen(msg.Content)
-		} else {
-			m.filter += msg.Content
-			m.applyFilter()
+		if m.input.active {
+			return m, m.input.Update(msg, nil)
 		}
+		m.filter += msg.Content
+		m.applyFilter()
 		return m, nil
 
 	// 按键
@@ -250,69 +245,34 @@ func (m logModel) Update(msg tea.Msg) (logModel, tea.Cmd) {
 			case "esc":
 				// 返回路径输入
 				m.dirListing = false
-				m.inputMode = true
-				m.inputValue = m.dirPath
-				m.inputCursor = runeLen(m.dirPath)
+				m.input.prompt = "Log file path:"
+				m.input.Open(m.dirPath)
 			}
 			return m, nil
 		}
 
 		// ---- 路径输入模式 ----
-		if m.inputMode {
-			switch key {
-			case "enter":
-				path := strings.TrimSpace(m.inputValue)
+		if m.input.active {
+			return m, m.input.Update(msg, func(path string) tea.Cmd {
 				if path != "" {
 					m.errMsg = ""
 					// 检测是目录还是文件
 					info, err := os.Stat(path)
 					if err != nil {
 						m.errMsg = "Path not found: " + path
-						return m, nil
+						return nil
 					}
 					if info.IsDir() {
 						// 目录：扫描 .log 文件
-						return m, func() tea.Msg { return scanLogDir(path) }
+						return func() tea.Msg { return scanLogDir(path) }
 					}
 					// 文件：直接加载
 					m.logPath = path
 					m.filter = ""
-					return m, func() tea.Msg { return loadLogFromFile(path) }
+					return func() tea.Msg { return loadLogFromFile(path) }
 				}
-				m.inputMode = false
-			case "esc":
-				m.inputMode = false
-				m.inputValue = ""
-				m.inputCursor = 0
-				m.errMsg = ""
-			case "left":
-				if m.inputCursor > 0 {
-					m.inputCursor--
-				}
-			case "right":
-				if m.inputCursor < runeLen(m.inputValue) {
-					m.inputCursor++
-				}
-			case "home":
-				m.inputCursor = 0
-			case "end":
-				m.inputCursor = runeLen(m.inputValue)
-			case "backspace":
-				if m.inputCursor > 0 {
-					m.inputValue = runeDeleteAt(m.inputValue, m.inputCursor-1)
-					m.inputCursor--
-				}
-			case "delete":
-				if m.inputCursor < runeLen(m.inputValue) {
-					m.inputValue = runeDeleteAt(m.inputValue, m.inputCursor)
-				}
-			default:
-				if len(key) == 1 && key >= " " {
-					m.inputValue = runeInsert(m.inputValue, key, m.inputCursor)
-					m.inputCursor++
-				}
-			}
-			return m, nil
+				return nil
+			})
 		}
 
 		// ---- 正常模式 ----
@@ -330,10 +290,9 @@ func (m logModel) Update(msg tea.Msg) (logModel, tea.Cmd) {
 				m.scroll++
 			}
 		case "/":
-			m.inputMode = true
-			m.inputValue = m.logPath
-			m.inputCursor = runeLen(m.logPath)
-		case "r":
+			m.input.prompt = "Log file path:"
+			m.input.Open(m.logPath)
+		case "R":
 			if m.logPath != "" {
 				return m, func() tea.Msg { return loadLogFromFile(m.logPath) }
 			}
@@ -432,14 +391,14 @@ func (m logModel) View() string {
 	}
 
 	// 路径输入模式
-	if m.inputMode {
+	if m.input.active {
 		var sb strings.Builder
-		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("  File or directory path:"))
+		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("  " + m.input.prompt))
 		sb.WriteString("\n")
 
 		// 绘制输入行，光标位置用 | 标记
-		before := runeSubstr(m.inputValue, 0, m.inputCursor)
-		after := runeSubstr(m.inputValue, m.inputCursor, runeLen(m.inputValue))
+		before := runeSubstr(m.input.value, 0, m.input.cursor)
+		after := runeSubstr(m.input.value, m.input.cursor, runeLen(m.input.value))
 		inputLine := "  > " + before + lipgloss.NewStyle().Foreground(colAccent).Render("|") + after
 		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render(inputLine))
 		sb.WriteString("\n\n")

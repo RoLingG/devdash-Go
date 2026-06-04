@@ -90,16 +90,15 @@ func fetchWeatherFromCity(city string) tea.Msg {
 }
 
 type weatherModel struct {
-	data       *wttrResponse
-	width      int
-	height     int
-	loaded     bool
-	loading    bool
-	err        error
-	city       string // 用户输入的城市名
-	inputMode  bool   // 是否处于输入模式
-	inputValue string // 当前输入的内容
-	scroll     int    // 滚动偏移
+	data    *wttrResponse
+	width   int
+	height  int
+	loaded  bool
+	loading bool
+	err     error
+	city    string     // 用户输入的城市名
+	input   inputModel // 通用输入组件
+	scroll  int        // 滚动偏移
 }
 
 func (m weatherModel) Init() tea.Cmd {
@@ -118,53 +117,37 @@ func (m weatherModel) Update(msg tea.Msg) (weatherModel, tea.Cmd) {
 			m.err = msg.err
 			m.loaded = true
 			m.loading = false
-			m.inputMode = false
+			m.input.active = false
 			return m, nil
 		}
 		m.data = msg.data
 		m.loaded = true
 		m.loading = false
 		m.err = nil
-		m.inputMode = false
+		m.input.active = false
 	case tea.PasteMsg:
 		// v2: 粘贴内容通过 PasteMsg 传递，不再是 KeyPressMsg
-		if m.inputMode {
-			m.inputValue += msg.Content
+		if m.input.active {
+			return m, m.input.Update(msg, nil)
 		}
 		return m, nil
 	case tea.KeyPressMsg:
 		// 输入模式下的按键处理
-		if m.inputMode {
-			switch msg.String() {
-			case "enter":
-				// 确认输入，获取天气
-				m.city = strings.TrimSpace(m.inputValue)
-				m.loading = true
-				m.err = nil
-				m.inputMode = false
-				return m, func() tea.Msg { return fetchWeatherFromCity(m.city) }
-			case "esc":
-				// 取消输入
-				m.inputMode = false
-				m.inputValue = ""
-			case "backspace":
-				// 删除最后一个字符（按 rune 删除，支持中文）
-				if runeLen(m.inputValue) > 0 {
-					runes := []rune(m.inputValue)
-					m.inputValue = string(runes[:len(runes)-1])
+		if m.input.active {
+			return m, m.input.Update(msg, func(city string) tea.Cmd {
+				if city != "" {
+					m.city = city
+					m.loading = true
+					m.err = nil
+					return func() tea.Msg { return fetchWeatherFromCity(city) }
 				}
-			default:
-				// 输入字符
-				if len(msg.String()) == 1 && msg.String() >= " " {
-					m.inputValue += msg.String()
-				}
-			}
-			return m, nil
+				return nil
+			})
 		}
 
 		// 非输入模式下的按键处理
 		switch msg.String() {
-		case "r":
+		case "R":
 			// 刷新天气
 			if m.city != "" {
 				m.loading = true
@@ -173,8 +156,8 @@ func (m weatherModel) Update(msg tea.Msg) (weatherModel, tea.Cmd) {
 			}
 		case "/":
 			// 进入输入模式
-			m.inputMode = true
-			m.inputValue = m.city // 预填当前城市
+			m.input.prompt = "City:"
+			m.input.Open(m.city)
 		case "up", "k":
 			if m.scroll > 0 {
 				m.scroll--
@@ -257,11 +240,18 @@ func (m weatherModel) View() string {
 	//}
 
 	// 输入框卡片
-	if m.inputMode {
-		inputContent := lipgloss.NewStyle().Foreground(colText).Render("City:") + " "
-		inputContent += lipgloss.NewStyle().Foreground(colAccent).Render(m.inputValue+"_") + "\n"
-		inputContent += lipgloss.NewStyle().Foreground(colMuted).Render("\nEnter confirm, Esc cancel")
-		return card("Change City", inputContent, colSecondary, cardWidth)
+	if m.input.active {
+		var sb strings.Builder
+		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("  " + m.input.prompt))
+		sb.WriteString("\n")
+
+		before := runeSubstr(m.input.value, 0, m.input.cursor)
+		after := runeSubstr(m.input.value, m.input.cursor, runeLen(m.input.value))
+		inputLine := "  > " + before + lipgloss.NewStyle().Foreground(colAccent).Render("|") + after
+		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render(inputLine))
+		sb.WriteString("\n\n")
+		sb.WriteString(lipgloss.NewStyle().Foreground(colMuted).Render("  Enter confirm  ←→ cursor  Home/End  Esc cancel"))
+		return card("Change City", sb.String(), colSecondary, cardWidth)
 	}
 
 	// 加载中

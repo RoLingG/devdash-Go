@@ -77,9 +77,9 @@ func renderTabBar(active tabState, width int) string {
 // renderHelp 渲染底部帮助栏
 func renderHelp(active tabState, width int) string {
 	helps := map[tabState]string{
-		tabGit:     " ↑↓ scroll  •  / change repo  •  r refresh  •  1/2/3/4 switch  •  ctrl+q quit",
-		tabLog:     " ↑↓ scroll  •  / open path  •  type to filter  •  Esc clear  •  r refresh  •  1/2/3/4 switch  •  ctrl+q quit",
-		tabWeather: " ↑↓ scroll  •  r refresh  •  / change city  •  1/2/3/4 switch  •  ctrl+q quit",
+		tabGit:     " ↑↓ scroll  •  / change repo  •  R refresh  •  1/2/3/4 switch  •  ctrl+q quit",
+		tabLog:     " ↑↓ scroll  •  / open path  •  type to filter  •  Esc clear  •  R refresh  •  1/2/3/4 switch  •  ctrl+q quit",
+		tabWeather: " ↑↓ scroll  •  R refresh  •  / change city  •  1/2/3/4 switch  •  ctrl+q quit",
 		tabConfig:  " ↑↓ move  •  enter toggle  •  / open file  •  type to search  •  Esc clear  •  1/2/3/4 switch  •  ctrl+q quit",
 	}
 	h := styleHelp.Render(helps[active])

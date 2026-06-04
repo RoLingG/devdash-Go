@@ -67,9 +67,7 @@ type gitModel struct {
 	repoPath string // 当前仓库路径
 
 	// 路径输入模式
-	inputMode   bool   // 是否处于输入模式
-	inputValue  string // 当前输入的内容
-	inputCursor int    // 光标位置（字节偏移）
+	input inputModel // 通用输入组件
 
 	// 目录仓库列表模式
 	dirListing bool     // 是否在显示目录仓库列表
@@ -96,14 +94,14 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 		m.loaded = true
 		m.loading = false
 		m.scroll = 0
-		m.inputMode = false
+		m.input.active = false
 		m.dirListing = false
 
 	// 目录扫描完成
 	case gitDirMsg:
 		if msg.repos == nil || len(msg.repos) == 0 {
 			m.err = fmt.Errorf("no git repos found in: %s", msg.dir)
-			m.inputMode = true
+			m.input.Open(m.dirPath)
 			m.dirListing = false
 			return m, nil
 		}
@@ -111,14 +109,13 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 		m.dirPath = msg.dir
 		m.dirRepos = msg.repos
 		m.dirCursor = 0
-		m.inputMode = false
+		m.input.active = false
 		return m, nil
 
 	// 粘贴
 	case tea.PasteMsg:
-		if m.inputMode {
-			m.inputValue = runeInsert(m.inputValue, msg.Content, m.inputCursor)
-			m.inputCursor += runeLen(msg.Content)
+		if m.input.active {
+			return m, m.input.Update(msg, nil)
 		}
 		return m, nil
 
@@ -147,18 +144,15 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 				return m, func() tea.Msg { return loadGitInfoFromDir(fullPath) }
 			case "esc":
 				m.dirListing = false
-				m.inputMode = true
-				m.inputValue = m.dirPath
-				m.inputCursor = runeLen(m.dirPath)
+				m.input.prompt = "Repository path:"
+				m.input.Open(m.dirPath)
 			}
 			return m, nil
 		}
 
 		// ---- 路径输入模式 ----
-		if m.inputMode {
-			switch key {
-			case "enter":
-				path := strings.TrimSpace(m.inputValue)
+		if m.input.active {
+			return m, m.input.Update(msg, func(path string) tea.Cmd {
 				if path == "" {
 					path = "."
 				}
@@ -167,7 +161,7 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 				info, err := os.Stat(path)
 				if err != nil {
 					m.err = fmt.Errorf("path not found: %s", path)
-					return m, nil
+					return nil
 				}
 				if info.IsDir() {
 					// 检查是否本身就是 git 仓库
@@ -176,50 +170,16 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 						// 是 git 仓库，直接加载
 						m.repoPath = path
 						m.loading = true
-						m.inputMode = false
-						return m, func() tea.Msg { return loadGitInfoFromDir(path) }
+						return func() tea.Msg { return loadGitInfoFromDir(path) }
 					}
 					// 不是 git 仓库，扫描子目录
-					return m, func() tea.Msg { return scanGitDir(path) }
+					return func() tea.Msg { return scanGitDir(path) }
 				}
 				// 是文件（不太常见），用其所在目录
 				m.repoPath = filepath.Dir(path)
 				m.loading = true
-				m.inputMode = false
-				return m, func() tea.Msg { return loadGitInfoFromDir(filepath.Dir(path)) }
-			case "esc":
-				m.inputMode = false
-				m.inputValue = ""
-				m.inputCursor = 0
-				m.err = nil
-			case "left":
-				if m.inputCursor > 0 {
-					m.inputCursor--
-				}
-			case "right":
-				if m.inputCursor < runeLen(m.inputValue) {
-					m.inputCursor++
-				}
-			case "home":
-				m.inputCursor = 0
-			case "end":
-				m.inputCursor = runeLen(m.inputValue)
-			case "backspace":
-				if m.inputCursor > 0 {
-					m.inputValue = runeDeleteAt(m.inputValue, m.inputCursor-1)
-					m.inputCursor--
-				}
-			case "delete":
-				if m.inputCursor < runeLen(m.inputValue) {
-					m.inputValue = runeDeleteAt(m.inputValue, m.inputCursor)
-				}
-			default:
-				if len(key) == 1 && key >= " " {
-					m.inputValue = runeInsert(m.inputValue, key, m.inputCursor)
-					m.inputCursor++
-				}
-			}
-			return m, nil
+				return func() tea.Msg { return loadGitInfoFromDir(filepath.Dir(path)) }
+			})
 		}
 
 		// ---- 正常模式 ----
@@ -231,10 +191,9 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 		case "down", "j":
 			m.scroll++
 		case "/":
-			m.inputMode = true
-			m.inputValue = m.repoPath
-			m.inputCursor = runeLen(m.repoPath)
-		case "r":
+			m.input.prompt = "Repository path:"
+			m.input.Open(m.repoPath)
+		case "R":
 			m.loading = true
 			m.err = nil
 			return m, func() tea.Msg { return loadGitInfoFromDir(m.repoPath) }
@@ -290,14 +249,14 @@ func (m gitModel) View() string {
 	}
 
 	// ---- 路径输入模式 ----
-	if m.inputMode {
+	if m.input.active {
 		var sb strings.Builder
-		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("  Repository path:"))
+		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("  " + m.input.prompt))
 		sb.WriteString("\n")
 
 		// 绘制输入行，光标位置用 | 标记
-		before := runeSubstr(m.inputValue, 0, m.inputCursor)
-		after := runeSubstr(m.inputValue, m.inputCursor, runeLen(m.inputValue))
+		before := runeSubstr(m.input.value, 0, m.input.cursor)
+		after := runeSubstr(m.input.value, m.input.cursor, runeLen(m.input.value))
 		inputLine := "  > " + before + lipgloss.NewStyle().Foreground(colAccent).Render("|") + after
 		sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render(inputLine))
 		sb.WriteString("\n\n")
