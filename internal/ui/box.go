@@ -1,0 +1,52 @@
+package ui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// Box 用边框包裹内容并加标题
+func Box(title, content string, width int) string {
+	header := StyleTitle.Render(title)
+	maxW := width - 4
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if lipgloss.Width(line) > maxW {
+			lines[i] = ForceTruncate(line, maxW)
+		}
+	}
+	return StyleBox.Width(maxW).Render(header + "\n" + strings.Join(lines, "\n"))
+}
+
+// Card 创建一个带边框的卡片
+func Card(title, content string, borderColor lipgloss.Color, width int) string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(borderColor).
+		MarginBottom(1)
+
+	cardStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1).
+		Width(width)
+
+	return cardStyle.Render(titleStyle.Render(title) + "\n" + content)
+}
+
+// BarChart 绘制水平柱状图的一行
+func BarChart(label string, value, maxValue, barMaxWidth int, barColor lipgloss.Color) string {
+	name := PadRight(Truncate(label, 20), 20)
+	barLen := 1
+	if maxValue > 0 {
+		barLen = int(float64(value) / float64(maxValue) * float64(barMaxWidth))
+		if barLen < 1 {
+			barLen = 1
+		}
+	}
+	bar := lipgloss.NewStyle().Foreground(barColor).Render(strings.Repeat("█", barLen))
+	count := lipgloss.NewStyle().Foreground(ColMuted).Render(fmt.Sprintf(" %d", value))
+	return fmt.Sprintf("  %s %s%s", name, bar, count)
+}
