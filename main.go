@@ -34,10 +34,10 @@ type model struct {
 	state   tabState      // 当前激活的 Tab
 	width   int           // 终端宽度
 	height  int           // 终端高度
-	git     gitModel      // Git 可视化子模块
-	log     logModel      // 日志查看器子模块
-	weather weatherModel  // 天气面板子模块
-	config  configModel   // 配置浏览器子模块
+	git     *gitModel     // Git 可视化子模块
+	log     *logModel     // 日志查看器子模块
+	weather *weatherModel // 天气面板子模块
+	config  *configModel  // 配置浏览器子模块
 }
 
 // Init 应用启动时执行的初始化命令
@@ -176,7 +176,13 @@ func (m model) View() tea.View {
 }
 
 func main() {
-	m := model{state: tabGit}
+	m := model{
+		state:   tabGit,
+		weather: &weatherModel{},
+		config:  &configModel{},
+		git:     &gitModel{},
+		log:     &logModel{},
+	}
 	p := tea.NewProgram(m) // v2: AltScreen 已在 View() 中设置
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

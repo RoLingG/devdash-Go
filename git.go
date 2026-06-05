@@ -93,7 +93,10 @@ func gitCommitsInDir(dir string, n int) []GitCommit {
 			continue
 		}
 		commits = append(commits, GitCommit{
-			Hash: parts[0], Author: parts[1], Date: parts[2], Message: parts[3],
+			Hash:    parts[0],
+			Author:  parts[1],
+			Date:    parts[2],
+			Message: parts[3],
 		})
 	}
 	return commits

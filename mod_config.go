@@ -133,7 +133,7 @@ func loadSampleConfig() tea.Msg {
   }
 }`
 	var raw interface{}
-	json.Unmarshal([]byte(sample), &raw)
+	_ = json.Unmarshal([]byte(sample), &raw)
 	root := buildTree("", raw, 0, true)
 	return cfgLoadMsg{root: root}
 }
@@ -310,13 +310,12 @@ type configModel struct {
 	input inputModel // 通用输入组件
 
 	// 目录文件列表模式
-	dirListing bool     // 是否在显示目录文件列表
-	dirPath    string   // 当前目录路径
-	dirFiles   []string // 目录下的配置文件列表
-	dirCursor  int      // 列表中当前选中的索引
+	dirListing bool      // 是否在显示目录文件列表
+	dirPath    string    // 当前目录路径
+	dirList    listModel // 通用列表组件
 }
 
-func (m configModel) Init() tea.Cmd {
+func (m *configModel) Init() tea.Cmd {
 	// 命令行参数：--config <file>
 	for i, arg := range os.Args[1:] {
 		if arg == "--config" {
@@ -335,7 +334,7 @@ func (m *configModel) UpdateSize(w, h int) { m.width = w; m.height = h }
 
 // ==================== 更新逻辑 ====================
 
-func (m configModel) Update(msg tea.Msg) (configModel, tea.Cmd) {
+func (m *configModel) Update(msg tea.Msg) (*configModel, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	// 配置加载完成
@@ -364,8 +363,7 @@ func (m configModel) Update(msg tea.Msg) (configModel, tea.Cmd) {
 		}
 		m.dirListing = true
 		m.dirPath = msg.dir
-		m.dirFiles = msg.files
-		m.dirCursor = 0
+		m.dirList.SetItems(msg.files)
 		m.input.active = false
 		return m, nil
 
@@ -386,15 +384,11 @@ func (m configModel) Update(msg tea.Msg) (configModel, tea.Cmd) {
 		if m.dirListing {
 			switch key {
 			case "up", "k":
-				if m.dirCursor > 0 {
-					m.dirCursor--
-				}
+				m.dirList.MoveUp()
 			case "down", "j":
-				if m.dirCursor < len(m.dirFiles)-1 {
-					m.dirCursor++
-				}
+				m.dirList.MoveDown()
 			case "enter":
-				selected := m.dirFiles[m.dirCursor]
+				selected := m.dirList.Selected()
 				fullPath := filepath.Join(m.dirPath, selected)
 				m.configPath = fullPath
 				m.dirListing = false
@@ -467,7 +461,7 @@ func (m configModel) Update(msg tea.Msg) (configModel, tea.Cmd) {
 
 // ==================== 视图 ====================
 
-func (m configModel) View() string {
+func (m *configModel) View() string {
 	// 卡片宽度
 	cardWidth := m.width - 2
 	if cardWidth < 40 {
@@ -484,26 +478,18 @@ func (m configModel) View() string {
 		if maxShow < 5 {
 			maxShow = 5
 		}
-		start := 0
-		if m.dirCursor >= maxShow {
-			start = m.dirCursor - maxShow + 1
-		}
-		end := start + maxShow
-		if end > len(m.dirFiles) {
-			end = len(m.dirFiles)
-		}
 
-		for i, f := range m.dirFiles[start:end] {
-			idx := start + i
-			if idx == m.dirCursor {
-				sb.WriteString(lipgloss.NewStyle().Foreground(colAccent).Render("  > " + f))
-			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("    " + f))
+		// 使用 listModel 渲染
+		highlightStyle := lipgloss.NewStyle().Foreground(colAccent)
+		listContent := m.dirList.RenderWithFormat(maxShow, func(item string, selected bool) string {
+			if selected {
+				return highlightStyle.Render("  > " + item)
 			}
-			sb.WriteString("\n")
-		}
+			return lipgloss.NewStyle().Foreground(colText).Render("    " + item)
+		})
 
-		sb.WriteString("\n")
+		sb.WriteString(listContent)
+		sb.WriteString("\n\n")
 		sb.WriteString(lipgloss.NewStyle().Foreground(colMuted).Render("  ↑↓ select  Enter open  Esc back"))
 		return card("Config Files", sb.String(), colSecondary, cardWidth)
 	}

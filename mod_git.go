@@ -70,13 +70,12 @@ type gitModel struct {
 	input inputModel // 通用输入组件
 
 	// 目录仓库列表模式
-	dirListing bool     // 是否在显示目录仓库列表
-	dirPath    string   // 当前目录路径
-	dirRepos   []string // 目录下的 git 仓库列表
-	dirCursor  int      // 列表中当前选中的索引
+	dirListing bool      // 是否在显示目录仓库列表
+	dirPath    string    // 当前目录路径
+	dirList    listModel // 通用列表组件
 }
 
-func (m gitModel) Init() tea.Cmd {
+func (m *gitModel) Init() tea.Cmd {
 	m.repoPath = "."
 	return func() tea.Msg { return loadGitInfoFromDir(".") }
 }
@@ -85,7 +84,7 @@ func (m *gitModel) UpdateSize(w, h int) { m.width = w; m.height = h }
 
 // ==================== 更新逻辑 ====================
 
-func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
+func (m *gitModel) Update(msg tea.Msg) (*gitModel, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	// Git 数据加载完成
@@ -107,8 +106,7 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 		}
 		m.dirListing = true
 		m.dirPath = msg.dir
-		m.dirRepos = msg.repos
-		m.dirCursor = 0
+		m.dirList.SetItems(msg.repos) // 使用 listModel
 		m.input.active = false
 		return m, nil
 
@@ -127,15 +125,11 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 		if m.dirListing {
 			switch key {
 			case "up", "k":
-				if m.dirCursor > 0 {
-					m.dirCursor--
-				}
+				m.dirList.MoveUp() // 使用 listModel
 			case "down", "j":
-				if m.dirCursor < len(m.dirRepos)-1 {
-					m.dirCursor++
-				}
+				m.dirList.MoveDown() // 使用 listModel
 			case "enter":
-				selected := m.dirRepos[m.dirCursor]
+				selected := m.dirList.Selected() // 使用 listModel
 				fullPath := filepath.Join(m.dirPath, selected)
 				m.repoPath = fullPath
 				m.dirListing = false
@@ -204,15 +198,12 @@ func (m gitModel) Update(msg tea.Msg) (gitModel, tea.Cmd) {
 
 // ==================== 视图 ====================
 
-func (m gitModel) View() string {
+func (m *gitModel) View() string {
 	// 卡片宽度（自适应终端宽度）
 	cardWidth := m.width - 2
 	if cardWidth < 40 {
 		cardWidth = 40
 	}
-	//if cardWidth > 100 {
-	//	cardWidth = 100
-	//}
 
 	// ---- 目录仓库列表模式 ----
 	if m.dirListing {
@@ -224,26 +215,18 @@ func (m gitModel) View() string {
 		if maxShow < 5 {
 			maxShow = 5
 		}
-		start := 0
-		if m.dirCursor >= maxShow {
-			start = m.dirCursor - maxShow + 1
-		}
-		end := start + maxShow
-		if end > len(m.dirRepos) {
-			end = len(m.dirRepos)
-		}
 
-		for i, r := range m.dirRepos[start:end] {
-			idx := start + i
-			if idx == m.dirCursor {
-				sb.WriteString(lipgloss.NewStyle().Foreground(colAccent).Render("  > " + r))
-			} else {
-				sb.WriteString(lipgloss.NewStyle().Foreground(colText).Render("    " + r))
+		// 使用 listModel 渲染
+		highlightStyle := lipgloss.NewStyle().Foreground(colAccent)
+		listContent := m.dirList.RenderWithFormat(maxShow, func(item string, selected bool) string {
+			if selected {
+				return highlightStyle.Render("  > " + item)
 			}
-			sb.WriteString("\n")
-		}
+			return lipgloss.NewStyle().Foreground(colText).Render("    " + item)
+		})
 
-		sb.WriteString("\n")
+		sb.WriteString(listContent)
+		sb.WriteString("\n\n")
 		sb.WriteString(lipgloss.NewStyle().Foreground(colMuted).Render("  ↑↓ select  Enter open  Esc back"))
 		return card("Git Repositories", sb.String(), colSecondary, cardWidth)
 	}
@@ -321,7 +304,7 @@ func (m gitModel) View() string {
 }
 
 // viewCommits 提交历史
-func (m gitModel) viewCommits() string {
+func (m *gitModel) viewCommits() string {
 	repoPath := m.repoPath
 	if repoPath == "" || repoPath == "." {
 		repoPath = "current directory"
@@ -379,7 +362,7 @@ func getHeatLimit(maxVal int) int {
 	return maxVal
 }
 
-func (m gitModel) viewFiles() string {
+func (m *gitModel) viewFiles() string {
 	if len(m.info.Files) == 0 {
 		return box("Hot Files", "  No data", m.width)
 	}
@@ -405,7 +388,7 @@ func (m gitModel) viewFiles() string {
 }
 
 // viewBranches 分支列表
-func (m gitModel) viewBranches() string {
+func (m *gitModel) viewBranches() string {
 	if len(m.info.Branches) == 0 {
 		return box("Branches", "  No data", m.width)
 	}
@@ -422,7 +405,7 @@ func (m gitModel) viewBranches() string {
 }
 
 // viewStats 仓库统计
-func (m gitModel) viewStats() string {
+func (m *gitModel) viewStats() string {
 	totalCommits := len(m.info.Commits)
 	totalFiles := len(m.info.Files)
 	totalBranches := len(m.info.Branches)

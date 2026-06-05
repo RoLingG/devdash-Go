@@ -101,7 +101,7 @@ type weatherModel struct {
 	scroll  int        // 滚动偏移
 }
 
-func (m weatherModel) Init() tea.Cmd {
+func (m *weatherModel) Init() tea.Cmd {
 	// 默认使用 Beijing 作为初始城市
 	m.city = "Beijing"
 	m.loading = true
@@ -110,7 +110,7 @@ func (m weatherModel) Init() tea.Cmd {
 
 func (m *weatherModel) UpdateSize(w, h int) { m.width = w; m.height = h }
 
-func (m weatherModel) Update(msg tea.Msg) (weatherModel, tea.Cmd) {
+func (m *weatherModel) Update(msg tea.Msg) (*weatherModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case weatherMsg:
 		if msg.err != nil {
@@ -229,7 +229,7 @@ func getWeatherIcon(desc string) string {
 	}
 }
 
-func (m weatherModel) View() string {
+func (m *weatherModel) View() string {
 	// 计算卡片宽度（自适应终端宽度，留出边距）
 	cardWidth := m.width - 2
 	if cardWidth < 40 {
