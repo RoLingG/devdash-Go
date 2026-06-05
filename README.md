@@ -52,7 +52,7 @@ go build -o devdash.exe .
 ### Git 模块 (`1`)
 - `↑` `↓` / `k` `j` - 滚动
 - `/` - 输入仓库路径（支持目录扫描，列出含 `.git` 的子目录）
-- `r` - 刷新数据
+- `R` - 刷新数据
 
 **显示内容：**
 - 提交历史（Hash、作者、日期、消息）
@@ -69,7 +69,7 @@ go build -o devdash.exe .
 ### 天气模块 (`3`)
 - `↑` `↓` / `k` `j` - 滚动内容
 - `/` - 切换城市
-- `r` - 刷新天气数据
+- `R` - 刷新天气数据
 
 **显示内容：**
 - 当前天气（温度、体感温度、湿度、风速、能见度、UV 指数）
@@ -87,16 +87,30 @@ go build -o devdash.exe .
 
 ```
 cava_go/
-├── main.go          # 主入口，顶层模型与 Tab 切换，跨模块消息路由
-├── ui.go            # 共享样式、Tab 栏、帮助栏、工具函数（card()、rune 级编辑工具）
-├── git.go           # Git 命令调用与数据解析
-├── mod_git.go       # Git 可视化模块（卡片式、目录扫描）
-├── mod_log.go       # 日志查看器模块（卡片式、目录扫描）
-├── mod_weather.go   # 天气面板模块（卡片式、滚动）
-├── mod_config.go    # 配置浏览器模块（JSON/YAML、树形折叠、搜索）
-├── docs/            # 项目文档
-├── go.mod
-└── go.sum
+├── main.go                        # 主入口，顶层模型与 Tab 切换，跨模块消息路由
+├── internal/
+│   ├── ui/                        # 样式、颜色、渲染辅助函数
+│   │   ├── style.go               # 颜色常量、样式常量、TabState
+│   │   ├── box.go                 # Card()、Box()、BarChart()
+│   │   ├── tabbar.go              # RenderTabBar()、RenderHelp()
+│   │   └── text.go                # Rune 系列函数、Truncate、PadRight
+│   ├── component/                 # 可复用 UI 状态组件
+│   │   ├── input.go               # InputModel（通用输入框）
+│   │   └── list.go                # ListModel（通用列表）
+│   ├── git/                       # Git 可视化模块
+│   │   ├── data.go                # GitInfo + git 命令执行与解析
+│   │   └── model.go               # gitModel + Init/Update/View
+│   ├── log/                       # 日志查看器模块
+│   │   ├── data.go                # 日志加载/扫描/级别检测
+│   │   └── model.go               # logModel + Init/Update/View
+│   ├── weather/                   # 天气面板模块
+│   │   ├── data.go                # wttr.in API 请求与解析
+│   │   └── model.go               # weatherModel + Init/Update/View
+│   └── config/                    # 配置浏览器模块
+│       ├── data.go                # JSON/YAML 解析与树构建
+│       └── model.go               # configModel + Init/Update/View
+├── docs/                          # 项目文档
+└── example/                       # 示例代码
 ```
 
 ## 依赖
