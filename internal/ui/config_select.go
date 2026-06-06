@@ -87,18 +87,10 @@ func (m ConfigSelectModel) View() tea.View {
 
 	var sb strings.Builder
 
-	// 标题
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(ColAccent).
-		Render("⚙️  DevDash 配置选择")
-	sb.WriteString(title)
-	sb.WriteString("\n\n")
-
 	// 说明
 	sb.WriteString(lipgloss.NewStyle().
 		Foreground(ColMuted).
-		Render("检测到配置文件，请选择启动方式："))
+		Render("  检测到配置文件，请选择启动方式："))
 	sb.WriteString("\n\n")
 
 	// 选项列表
@@ -113,28 +105,25 @@ func (m ConfigSelectModel) View() tea.View {
 		sb.WriteString(prefix + choice + "\n")
 	}
 
-	// 显示已有配置预览
+	// 显示已有配置预览（用 Card 渲染）
 	if m.hasCfg && m.cursor == 1 {
-		sb.WriteString("\n")
-		sb.WriteString(lipgloss.NewStyle().
-			Foreground(ColSecondary).
-			Render("┌─ 配置预览 ─────────────────────────"))
-		sb.WriteString("\n")
+		var preview strings.Builder
 		if m.cfg.DefaultCity != "" {
-			sb.WriteString(fmt.Sprintf("  默认城市: %s\n", m.cfg.DefaultCity))
+			preview.WriteString(fmt.Sprintf("  默认城市: %s\n", m.cfg.DefaultCity))
 		}
 		if len(m.cfg.RecentRepos) > 0 {
-			sb.WriteString(fmt.Sprintf("  最近仓库: %d 个\n", len(m.cfg.RecentRepos)))
+			preview.WriteString(fmt.Sprintf("  最近仓库: %d 个\n", len(m.cfg.RecentRepos)))
 		}
 		if len(m.cfg.RecentLogFiles) > 0 {
-			sb.WriteString(fmt.Sprintf("  最近日志: %d 个\n", len(m.cfg.RecentLogFiles)))
+			preview.WriteString(fmt.Sprintf("  最近日志: %d 个\n", len(m.cfg.RecentLogFiles)))
 		}
 		if len(m.cfg.RecentConfigFiles) > 0 {
-			sb.WriteString(fmt.Sprintf("  最近配置: %d 个\n", len(m.cfg.RecentConfigFiles)))
+			preview.WriteString(fmt.Sprintf("  最近配置: %d 个\n", len(m.cfg.RecentConfigFiles)))
 		}
-		sb.WriteString(lipgloss.NewStyle().
-			Foreground(ColSecondary).
-			Render("└──────────────────────────────────────"))
+		sb.WriteString("\n")
+		// 预览 Card 宽度自适应，比外层 Card 窄一些，留出边框间距
+		previewCard := Card("配置预览", preview.String(), ColMuted, 34)
+		sb.WriteString(previewCard)
 	}
 
 	sb.WriteString("\n")
@@ -142,14 +131,59 @@ func (m ConfigSelectModel) View() tea.View {
 		Foreground(ColMuted).
 		Render("↑↓ 选择  Enter 确认"))
 
-	// 居中显示
-	card := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColSecondary).
-		Padding(1, 3).
-		Render(sb.String())
+	// 根据内容宽度自适应卡片大小
+	contentLines := strings.Split(sb.String(), "\n")
+	maxContentWidth := 0
+	for _, line := range contentLines {
+		if w := lipgloss.Width(line); w > maxContentWidth {
+			maxContentWidth = w
+		}
+	}
+	cardWidth := maxContentWidth + 6
+	// 不能超过终端宽度
+	maxWidth := m.width - 4
+	if cardWidth > maxWidth {
+		cardWidth = maxWidth
+	}
+	if cardWidth < 30 {
+		cardWidth = 30
+	}
+	// 截断超宽行，防止选中项（▸ 前缀）溢出右边框
+	for i, line := range contentLines {
+		if lipgloss.Width(line) > cardWidth {
+			contentLines[i] = ForceTruncate(line, cardWidth)
+		}
+	}
+	content := strings.Join(contentLines, "\n")
+	card := Card("📋 DevDash 配置选择", content, ColSecondary, cardWidth)
 
-	return tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, card))
+	// 水平垂直居中
+	lines := strings.Split(card, "\n")
+	cardHeight := len(lines)
+	verticalPad := (m.height - cardHeight) / 2
+	if verticalPad < 0 {
+		verticalPad = 0
+	}
+
+	var centered []string
+	// 上方空行
+	for i := 0; i < verticalPad; i++ {
+		centered = append(centered, strings.Repeat(" ", m.width))
+	}
+	// 每行水平居中
+	for _, line := range lines {
+		w := lipgloss.Width(line)
+		leftPad := (m.width - w) / 2
+		if leftPad < 0 {
+			leftPad = 0
+		}
+		rightPad := m.width - leftPad - w
+		centered = append(centered, strings.Repeat(" ", leftPad)+line+strings.Repeat(" ", rightPad))
+	}
+
+	v := tea.NewView(strings.Join(centered, "\n"))
+	v.AltScreen = true
+	return v
 }
 
 // GetChoice 获取用户选择
