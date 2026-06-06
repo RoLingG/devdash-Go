@@ -27,23 +27,25 @@ import (
 // model 整个应用的顶层状态模型
 // Bubbletea 的核心：Model(数据) → Update(更新) → View(渲染)
 type model struct {
-	state   ui.TabState      // 当前激活的 Tab
-	width   int              // 终端宽度
-	height  int              // 终端高度
-	git     *git.Model       // Git 可视化子模块
-	log     *log.Model       // 日志查看器子模块
-	weather *weather.Model   // 天气面板子模块
-	config  *config.Model    // 配置浏览器子模块
+	state    ui.TabState    // 当前激活的 Tab
+	width    int            // 终端宽度
+	height   int            // 终端高度
+	appCfg   ui.AppConfig   // 应用持久化配置
+	cfgSaved bool           // 配置是否已保存（用于显示提示）
+	git      *git.Model     // Git 可视化子模块
+	log      *log.Model     // 日志查看器子模块
+	weather  *weather.Model // 天气面板子模块
+	config   *config.Model  // 配置浏览器子模块
 }
 
 // Init 应用启动时执行的初始化命令
 // 返回一个 Batch 命令，同时初始化所有子模块
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
-		m.git.Init(),
-		m.log.Init(),
-		m.weather.Init(),
-		m.config.Init(),
+		m.git.Init(m.appCfg.DefaultRepo),
+		m.log.Init(m.appCfg.LastLogPath),
+		m.weather.Init(m.appCfg.DefaultCity),
+		m.config.Init(m.appCfg.LastConfigPath),
 	)
 }
 
@@ -51,6 +53,25 @@ func (m model) Init() tea.Cmd {
 // Bubbletea 框架会把所有事件封装为 tea.Msg 传入
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+
+	// 配置变更消息：各模块在路径/城市变更时发送，此处同步到持久化配置
+	switch msg := msg.(type) {
+	case ui.CfgChangedMsg:
+		switch msg.Key {
+		case "city":
+			m.appCfg.DefaultCity = msg.Value
+		case "repo":
+			m.appCfg.DefaultRepo = msg.Value
+			m.appCfg.RecentRepos = ui.AddToRecent(m.appCfg.RecentRepos, msg.Value, 10)
+		case "logPath":
+			m.appCfg.LastLogPath = msg.Value
+			m.appCfg.RecentLogFiles = ui.AddToRecent(m.appCfg.RecentLogFiles, msg.Value, 10)
+		case "configPath":
+			m.appCfg.LastConfigPath = msg.Value
+			m.appCfg.RecentConfigFiles = ui.AddToRecent(m.appCfg.RecentConfigFiles, msg.Value, 10)
+		}
+		return m, nil
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -70,8 +91,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// ctrl+r 手动触发窗口大小检测（Windows 不支持 SIGWINCH）
 		case "ctrl+r":
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
-		// 数字键切换 Tab（全局快捷键，在任何子模块中都能用）
-		// 切换时顺便检测窗口大小，确保布局正确
+		// ctrl+s 保存当前配置
+		case "ctrl+s":
+			if err := ui.SaveConfig(m.appCfg); err != nil {
+				// 保存失败，可以通过状态提示（暂时忽略）
+			} else {
+				m.cfgSaved = true
+			}
+			return m, nil
+		// 数字键切换 Tab（全局快捷键）,切换时顺便检测窗口大小，确保布局正确
 		case "1":
 			m.state = ui.TabGit
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
@@ -172,15 +200,47 @@ func (m model) View() tea.View {
 }
 
 func main() {
+	// 配置选择界面先使用默认尺寸；启动后会通过 WindowSizeMsg 更新真实尺寸
+	width, height := 80, 24
+
+	// 配置选择流程
+	var appCfg ui.AppConfig
+	if ui.ConfigExists() {
+		// 显示配置选择界面
+		cfgSelect := ui.NewConfigSelectModel(width, height)
+		p2 := tea.NewProgram(cfgSelect)
+		result, err := p2.Run()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		if cm, ok := result.(ui.ConfigSelectModel); ok {
+			switch cm.GetChoice() {
+			case 0: // 默认配置
+				appCfg = ui.DefaultConfig()
+			case 1: // 加载持久化配置
+				appCfg = cm.GetConfig()
+			case 2: // 自定义配置（暂时也用默认，后续可扩展输入界面）
+				appCfg = ui.DefaultConfig()
+			}
+		}
+	} else {
+		// 没有配置文件，使用默认配置
+		appCfg = ui.DefaultConfig()
+	}
+
+	// 启动主界面
 	m := model{
 		state:   ui.TabGit,
+		appCfg:  appCfg,
 		weather: &weather.Model{},
 		config:  &config.Model{},
 		git:     &git.Model{},
 		log:     &log.Model{},
 	}
-	p := tea.NewProgram(m) // v2: AltScreen 已在 View() 中设置
-	if _, err := p.Run(); err != nil {
+	p3 := tea.NewProgram(m)
+	if _, err := p3.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

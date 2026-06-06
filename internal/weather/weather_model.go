@@ -26,10 +26,13 @@ type Model struct {
 	scroll  int
 }
 
-func (m *Model) Init() tea.Cmd {
-	m.city = "Beijing"
+func (m *Model) Init(defaultCity string) tea.Cmd {
+	if defaultCity == "" {
+		defaultCity = "Beijing"
+	}
+	m.city = defaultCity
 	m.loading = true
-	return func() tea.Msg { return FetchFromCity("Beijing") }
+	return FetchFromCityCmd(defaultCity)
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -56,22 +59,25 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, func(city string) func() tea.Msg {
-				if city != "" {
-					m.city = city
-					m.loading = true
-					m.err = nil
-					return func() tea.Msg { return FetchFromCity(city) }
-				}
-				return nil
-			})
+			return m, tea.Batch(
+				m.input.Update(msg, func(city string) func() tea.Msg {
+					if city != "" {
+						m.city = city
+						m.loading = true
+						m.err = nil
+						return FetchFromCityCmd(city)
+					}
+					return nil
+				}),
+				ui.UpdateCfgCmd("city", m.city),
+			)
 		}
 		switch msg.String() {
 		case "R":
 			if m.city != "" {
 				m.loading = true
 				m.err = nil
-				return m, func() tea.Msg { return FetchFromCity(m.city) }
+				return m, FetchFromCityCmd(m.city)
 			}
 		case "/":
 			m.input.Prompt = "City:"

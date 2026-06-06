@@ -32,7 +32,7 @@ type Model struct {
 	dirList    component.ListModel
 }
 
-func (m *Model) Init() tea.Cmd {
+func (m *Model) Init(lastLogPath string) tea.Cmd {
 	stat, _ := os.Stdin.Stat()
 	if stat != nil && (stat.Mode()&os.ModeCharDevice) == 0 {
 		return LoadFromStdin
@@ -42,9 +42,14 @@ func (m *Model) Init() tea.Cmd {
 			fileIdx := i + 2
 			if fileIdx < len(os.Args) {
 				logPath := os.Args[fileIdx]
-				return func() tea.Msg { return LoadFromFile(logPath) }
+				m.logPath = logPath
+				return LoadFromFileCmd(logPath)
 			}
 		}
+	}
+	if lastLogPath != "" {
+		m.logPath = lastLogPath
+		return LoadFromFileCmd(lastLogPath)
 	}
 	return nil
 }
@@ -113,7 +118,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.dirListing = false
 				m.filter = ""
 				m.errMsg = ""
-				return m, func() tea.Msg { return LoadFromFile(fullPath) }
+				return m, tea.Batch(LoadFromFileCmd(fullPath), ui.UpdateCfgCmd("logPath", fullPath))
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Log file path:"
@@ -123,23 +128,26 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 
 		if m.input.Active {
-			return m, m.input.Update(msg, func(path string) func() tea.Msg {
-				if path != "" {
-					m.errMsg = ""
-					info, err := os.Stat(path)
-					if err != nil {
-						m.errMsg = "Path not found: " + path
-						return nil
+			return m, tea.Batch(
+				m.input.Update(msg, func(path string) func() tea.Msg {
+					if path != "" {
+						m.errMsg = ""
+						info, err := os.Stat(path)
+						if err != nil {
+							m.errMsg = "Path not found: " + path
+							return nil
+						}
+						if info.IsDir() {
+							return ScanDirCmd(path)
+						}
+						m.logPath = path
+						m.filter = ""
+						return LoadFromFileCmd(path)
 					}
-					if info.IsDir() {
-						return func() tea.Msg { return ScanDir(path) }
-					}
-					m.logPath = path
-					m.filter = ""
-					return func() tea.Msg { return LoadFromFile(path) }
-				}
-				return nil
-			})
+					return nil
+				}),
+				ui.UpdateCfgCmd("logPath", m.logPath),
+			)
 		}
 
 		switch key {

@@ -28,10 +28,10 @@ func RenderTabBar(active TabState, width int) string {
 // RenderHelp 渲染底部帮助栏
 func RenderHelp(active TabState, width int) string {
 	helps := map[TabState]string{
-		TabGit:     " ↑↓ scroll  •  / change repo  •  R refresh  •  1/2/3/4 switch  •  ctrl+q quit",
-		TabLog:     " ↑↓ scroll  •  / open path  •  type to filter  •  Esc clear  •  R refresh  •  1/2/3/4 switch  •  ctrl+q quit",
-		TabWeather: " ↑↓ scroll  •  R refresh  •  / change city  •  1/2/3/4 switch  •  ctrl+q quit",
-		TabConfig:  " ↑↓ move  •  enter toggle  •  / open file  •  type to search  •  Esc clear  •  1/2/3/4 switch  •  ctrl+q quit",
+		TabGit:     " ↑↓ scroll  •  / change repo  •  R refresh  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
+		TabLog:     " ↑↓ scroll  •  / open path  •  type to filter  •  Esc clear  •  R refresh  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
+		TabWeather: " ↑↓ scroll  •  R refresh  •  / change city  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
+		TabConfig:  " ↑↓ move  •  enter toggle  •  / open file  •  type to search  •  Esc clear  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
 	}
 	h := StyleHelp.Render(helps[active])
 	gap := width - lipgloss.Width(h)

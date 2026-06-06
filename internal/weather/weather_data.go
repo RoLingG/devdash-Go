@@ -75,6 +75,11 @@ func FetchFromCity(city string) tea.Msg {
 	return Msg{Data: &data}
 }
 
+// FetchFromCityCmd 返回一个执行 FetchFromCity 的 Cmd
+func FetchFromCityCmd(city string) tea.Cmd {
+	return func() tea.Msg { return FetchFromCity(city) }
+}
+
 // GetWeatherIcon 根据天气描述返回 ASCII 图标
 func GetWeatherIcon(desc string) string {
 	desc = strings.ToLower(desc)

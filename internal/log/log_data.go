@@ -79,6 +79,16 @@ func ScanDir(dir string) tea.Msg {
 	return DirMsg{Dir: dir, Files: files}
 }
 
+// LoadFromFileCmd 返回一个执行 LoadFromFile 的 Cmd
+func LoadFromFileCmd(path string) tea.Cmd {
+	return func() tea.Msg { return LoadFromFile(path) }
+}
+
+// ScanDirCmd 返回一个执行 ScanDir 的 Cmd
+func ScanDirCmd(dir string) tea.Cmd {
+	return func() tea.Msg { return ScanDir(dir) }
+}
+
 func detectLevel(s string) string {
 	upper := strings.ToUpper(s)
 	switch {

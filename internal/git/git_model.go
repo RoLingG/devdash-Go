@@ -46,6 +46,16 @@ func ScanDir(dir string) tea.Msg {
 	return DirMsg{Dir: dir, Repos: repos}
 }
 
+// LoadInfoFromDirCmd 返回一个执行 LoadInfoFromDir 的 Cmd
+func LoadInfoFromDirCmd(dir string) tea.Cmd {
+	return func() tea.Msg { return LoadInfoFromDir(dir) }
+}
+
+// ScanDirCmd 返回一个执行 ScanDir 的 Cmd
+func ScanDirCmd(dir string) tea.Cmd {
+	return func() tea.Msg { return ScanDir(dir) }
+}
+
 // Model Git 模块状态
 type Model struct {
 	info     Info
@@ -63,9 +73,12 @@ type Model struct {
 	dirList    component.ListModel
 }
 
-func (m *Model) Init() tea.Cmd {
-	m.repoPath = "."
-	return func() tea.Msg { return LoadInfoFromDir(".") }
+func (m *Model) Init(defaultRepo string) tea.Cmd {
+	if defaultRepo == "" {
+		defaultRepo = "."
+	}
+	m.repoPath = defaultRepo
+	return LoadInfoFromDirCmd(defaultRepo)
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -116,7 +129,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.dirListing = false
 				m.loading = true
 				m.err = nil
-				return m, func() tea.Msg { return LoadInfoFromDir(fullPath) }
+				return m, tea.Batch(LoadInfoFromDirCmd(fullPath), ui.UpdateCfgCmd("repo", fullPath))
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Repository path:"
@@ -126,29 +139,32 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 
 		if m.input.Active {
-			return m, m.input.Update(msg, func(path string) func() tea.Msg {
-				if path == "" {
-					path = "."
-				}
-				m.err = nil
-				info, err := os.Stat(path)
-				if err != nil {
-					m.err = fmt.Errorf("path not found: %s", path)
-					return nil
-				}
-				if info.IsDir() {
-					gitPath := filepath.Join(path, ".git")
-					if gi, gerr := os.Stat(gitPath); gerr == nil && gi.IsDir() {
-						m.repoPath = path
-						m.loading = true
-						return func() tea.Msg { return LoadInfoFromDir(path) }
+			return m, tea.Batch(
+				m.input.Update(msg, func(path string) func() tea.Msg {
+					if path == "" {
+						path = "."
 					}
-					return func() tea.Msg { return ScanDir(path) }
-				}
-				m.repoPath = filepath.Dir(path)
-				m.loading = true
-				return func() tea.Msg { return LoadInfoFromDir(filepath.Dir(path)) }
-			})
+					m.err = nil
+					info, err := os.Stat(path)
+					if err != nil {
+						m.err = fmt.Errorf("path not found: %s", path)
+						return nil
+					}
+					if info.IsDir() {
+						gitPath := filepath.Join(path, ".git")
+						if gi, gerr := os.Stat(gitPath); gerr == nil && gi.IsDir() {
+							m.repoPath = path
+							m.loading = true
+							return LoadInfoFromDirCmd(path)
+						}
+						return ScanDirCmd(path)
+					}
+					m.repoPath = filepath.Dir(path)
+					m.loading = true
+					return LoadInfoFromDirCmd(filepath.Dir(path))
+				}),
+				ui.UpdateCfgCmd("repo", m.repoPath),
+			)
 		}
 
 		switch key {

@@ -32,15 +32,20 @@ type Model struct {
 	dirList    component.ListModel
 }
 
-func (m *Model) Init() tea.Cmd {
+func (m *Model) Init(lastConfigPath string) tea.Cmd {
 	for i, arg := range os.Args[1:] {
 		if arg == "--config" {
 			fileIdx := i + 2
 			if fileIdx < len(os.Args) {
 				configPath := os.Args[fileIdx]
-				return func() tea.Msg { return LoadFile(configPath) }
+				m.configPath = configPath
+				return LoadFileCmd(configPath)
 			}
 		}
+	}
+	if lastConfigPath != "" {
+		m.configPath = lastConfigPath
+		return LoadFileCmd(lastConfigPath)
 	}
 	return func() tea.Msg { return LoadSampleConfig() }
 }
@@ -100,7 +105,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.configPath = fullPath
 				m.dirListing = false
 				m.err = nil
-				return m, func() tea.Msg { return LoadFile(fullPath) }
+				return m, tea.Batch(LoadFileCmd(fullPath), ui.UpdateCfgCmd("configPath", fullPath))
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Config file path:"
@@ -110,22 +115,25 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 
 		if m.input.Active {
-			return m, m.input.Update(msg, func(path string) func() tea.Msg {
-				if path != "" {
-					m.err = nil
-					info, err := os.Stat(path)
-					if err != nil {
-						m.err = fmt.Errorf("path not found: %s", path)
-						return nil
+			return m, tea.Batch(
+				m.input.Update(msg, func(path string) func() tea.Msg {
+					if path != "" {
+						m.err = nil
+						info, err := os.Stat(path)
+						if err != nil {
+							m.err = fmt.Errorf("path not found: %s", path)
+							return nil
+						}
+						if info.IsDir() {
+							return ScanDirCmd(path)
+						}
+						m.configPath = path
+						return LoadFileCmd(path)
 					}
-					if info.IsDir() {
-						return func() tea.Msg { return ScanDir(path) }
-					}
-					m.configPath = path
-					return func() tea.Msg { return LoadFile(path) }
-				}
-				return nil
-			})
+					return nil
+				}),
+				ui.UpdateCfgCmd("configPath", m.configPath),
+			)
 		}
 
 		switch key {
