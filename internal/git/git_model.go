@@ -83,6 +83,9 @@ func (m *Model) Init(defaultRepo string) tea.Cmd {
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
+// InputActive 输入框是否活跃
+func (m *Model) InputActive() bool { return m.input.Active }
+
 // Update 处理消息
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -252,7 +255,7 @@ func (m *Model) View() string {
 	full := strings.Join(sec, "\n\n")
 	lines := strings.Split(full, "\n")
 
-	top := m.height - 6
+	top := m.height - 3
 	if top < 5 {
 		top = 5
 	}

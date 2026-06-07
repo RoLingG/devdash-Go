@@ -56,6 +56,9 @@ func (m *Model) Init(lastLogPath string) tea.Cmd {
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
+// InputActive 输入框是否活跃
+func (m *Model) InputActive() bool { return m.input.Active }
+
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LoadMsg:
@@ -75,7 +78,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.input.Active = false
 		m.dirListing = false
 		m.errMsg = ""
-		m.scroll = len(m.filtered) - (m.height - 8)
+		m.scroll = len(m.filtered) - (m.height - 9)
 		if m.scroll < 0 {
 			m.scroll = 0
 		}
@@ -156,7 +159,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.scroll--
 			}
 		case "down", "j":
-			maxScroll := len(m.filtered) - (m.height - 8)
+			maxScroll := len(m.filtered) - (m.height - 9)
 			if maxScroll < 0 {
 				maxScroll = 0
 			}
@@ -263,7 +266,7 @@ func (m *Model) View() string {
 	lines = append(lines, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(filterInfo))
 	lines = append(lines, "")
 
-	viewH := m.height - 10
+	viewH := m.height - 11
 	if viewH < 5 {
 		viewH = 5
 	}
@@ -278,7 +281,8 @@ func (m *Model) View() string {
 
 	lines = append(lines, "")
 	lines = append(lines, m.stats())
-	return strings.Join(lines, "\n")
+	//return strings.Join(lines, "\n")
+	return ui.Box("Log", strings.Join(lines, "\n"), m.width)
 }
 
 func (m *Model) stats() string {

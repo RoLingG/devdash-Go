@@ -25,18 +25,43 @@ func RenderTabBar(active TabState, width int) string {
 	return bar
 }
 
-// RenderHelp 渲染底部帮助栏
-func RenderHelp(active TabState, width int) string {
-	helps := map[TabState]string{
-		TabGit:     " ↑↓ scroll  •  / change repo  •  R refresh  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
-		TabLog:     " ↑↓ scroll  •  / open path  •  type to filter  •  Esc clear  •  R refresh  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
-		TabWeather: " ↑↓ scroll  •  R refresh  •  / change city  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
-		TabConfig:  " ↑↓ move  •  enter toggle  •  / open file  •  type to search  •  Esc clear  •  1/2/3/4 switch  •  ctrl+s save  •  ctrl+q quit",
-	}
-	h := StyleHelp.Render(helps[active])
-	gap := width - lipgloss.Width(h)
+// helpLine 一行快捷键提示，用分隔符连接并补齐宽度
+func helpLine(parts []string, width int, sep string) string {
+	h := " " + strings.Join(parts, sep) + " "
+	styled := StyleHelp.Render(h)
+	gap := width - lipgloss.Width(styled)
 	if gap > 0 {
-		h += StyleHelp.Render(strings.Repeat(" ", gap))
+		styled += StyleHelp.Render(strings.Repeat(" ", gap))
 	}
-	return h
+	return styled
+}
+
+// RenderStatusBar 渲染底部双行状态栏（nano 风格）
+// line1: 模块专属操作
+// line2: 全局操作
+func RenderStatusBar(active TabState, width int) string {
+	sep := "  \u2022  " // • 分隔符
+
+	switch active {
+	case TabGit:
+		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ repo", "R refresh", "? help"}, width, sep)
+		line2 := helpLine([]string{"1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabLog:
+		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ open", "type filter", "Esc clear", "? help"}, width, sep)
+		line2 := helpLine([]string{"R refresh", "1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabWeather:
+		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ city", "R refresh", "? help"}, width, sep)
+		line2 := helpLine([]string{"1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabConfig:
+		line1 := helpLine([]string{"\u2191\u2193 move", "enter toggle", "/ open", "type search", "? help"}, width, sep)
+		line2 := helpLine([]string{"Esc clear", "1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		return line1 + "\n" + line2
+	}
+	return ""
 }

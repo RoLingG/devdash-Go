@@ -52,6 +52,9 @@ func (m *Model) Init(lastConfigPath string) tea.Cmd {
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
+// InputActive 输入框是否活跃
+func (m *Model) InputActive() bool { return m.input.Active }
+
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LoadMsg:
@@ -234,7 +237,7 @@ func (m *Model) View() string {
 		headerLines += 2
 	}
 
-	viewH := m.height - 2 - 4 - headerLines - 2
+	viewH := m.height - 2 - 4 - headerLines - 3
 	if viewH < 3 {
 		viewH = 3
 	}
@@ -269,7 +272,7 @@ func (m *Model) rebuildLines() {
 }
 
 func (m *Model) clampScroll() {
-	viewH := m.height - 10
+	viewH := m.height - 11
 	if viewH < 3 {
 		viewH = 3
 	}

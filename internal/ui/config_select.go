@@ -53,7 +53,7 @@ func (m ConfigSelectModel) Init() tea.Cmd {
 func (m ConfigSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		// 配置选择界面启动后更新真实终端尺寸，避免 main.go 额外启动空 model。
+		// 配置选择界面启动后更新真实终端尺寸
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
@@ -72,7 +72,7 @@ func (m ConfigSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "q", "esc":
 			m.selected = true
-			m.cursor = 0 // 默认选择第一个
+			m.cursor = 0
 			return m, tea.Quit
 		}
 	}
@@ -105,7 +105,7 @@ func (m ConfigSelectModel) View() tea.View {
 		sb.WriteString(prefix + choice + "\n")
 	}
 
-	// 显示已有配置预览（用 Card 渲染）
+	// 显示已有配置预览
 	if m.hasCfg && m.cursor == 1 {
 		var preview strings.Builder
 		if m.cfg.DefaultCity != "" {
@@ -121,7 +121,6 @@ func (m ConfigSelectModel) View() tea.View {
 			preview.WriteString(fmt.Sprintf("  最近配置: %d 个\n", len(m.cfg.RecentConfigFiles)))
 		}
 		sb.WriteString("\n")
-		// 预览 Card 宽度自适应，比外层 Card 窄一些，留出边框间距
 		previewCard := Card("配置预览", preview.String(), ColMuted, 34)
 		sb.WriteString(previewCard)
 	}
@@ -140,7 +139,6 @@ func (m ConfigSelectModel) View() tea.View {
 		}
 	}
 	cardWidth := maxContentWidth + 6
-	// 不能超过终端宽度
 	maxWidth := m.width - 4
 	if cardWidth > maxWidth {
 		cardWidth = maxWidth
@@ -148,7 +146,7 @@ func (m ConfigSelectModel) View() tea.View {
 	if cardWidth < 30 {
 		cardWidth = 30
 	}
-	// 截断超宽行，防止选中项（▸ 前缀）溢出右边框
+	// 截断超宽行，防止溢出右边框
 	for i, line := range contentLines {
 		if lipgloss.Width(line) > cardWidth {
 			contentLines[i] = ForceTruncate(line, cardWidth)

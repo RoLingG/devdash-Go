@@ -27,15 +27,16 @@ import (
 // model 整个应用的顶层状态模型
 // Bubbletea 的核心：Model(数据) → Update(更新) → View(渲染)
 type model struct {
-	state    ui.TabState    // 当前激活的 Tab
-	width    int            // 终端宽度
-	height   int            // 终端高度
-	appCfg   ui.AppConfig   // 应用持久化配置
-	cfgSaved bool           // 配置是否已保存（用于显示提示）
-	git      *git.Model     // Git 可视化子模块
-	log      *log.Model     // 日志查看器子模块
-	weather  *weather.Model // 天气面板子模块
-	config   *config.Model  // 配置浏览器子模块
+	state       ui.TabState    // 当前激活的 Tab
+	width       int            // 终端宽度
+	height      int            // 终端高度
+	appCfg      ui.AppConfig   // 应用持久化配置
+	cfgSaved    bool           // 配置是否已保存（用于显示提示）
+	helpShowing bool           // 帮助面板是否展开
+	git         *git.Model     // Git 可视化子模块
+	log         *log.Model     // 日志查看器子模块
+	weather     *weather.Model // 天气面板子模块
+	config      *config.Model  // 配置浏览器子模块
 }
 
 // Init 应用启动时执行的初始化命令
@@ -98,6 +99,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.cfgSaved = true
 			}
+			return m, nil
+		// ? 切换帮助面板（排除输入框活跃状态）
+		case "?":
+			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() {
+				// 输入框活跃时，? 透传给模块
+				break
+			}
+			m.helpShowing = !m.helpShowing
 			return m, nil
 		// 数字键切换 Tab（全局快捷键）,切换时顺便检测窗口大小，确保布局正确
 		case "1":
@@ -163,7 +172,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View 根据当前状态渲染整个界面
-// 布局：Tab 栏(顶部) + 模块内容(中间) + 帮助栏(底部)
+// 布局：Tab 栏(顶部) + 模块内容(中间) + 状态栏(底部 2 行)
 func (m model) View() tea.View {
 	tabBar := ui.RenderTabBar(m.state, m.width)
 
@@ -180,11 +189,16 @@ func (m model) View() tea.View {
 		content = m.config.View()
 	}
 
-	help := ui.RenderHelp(m.state, m.width)
+	// 帮助面板覆盖在主内容上
+	if m.helpShowing {
+		content = ui.RenderHelpOverlay(m.state, m.width, m.height-3)
+	}
 
-	// 计算内容区域可用高度，用空行填充让 help 栏固定在底部
-	// tabBar 占 1 行，help 占 1 行，中间是内容区
-	contentHeight := m.height - 2
+	statusBar := ui.RenderStatusBar(m.state, m.width)
+
+	// 计算内容区域可用高度，用空行填充让状态栏固定在底部
+	// tabBar 占 1 行，statusBar 占 2 行，中间是内容区
+	contentHeight := m.height - 3
 	if contentHeight < 1 {
 		contentHeight = 1
 	}
@@ -194,8 +208,8 @@ func (m model) View() tea.View {
 		content += strings.Repeat("\n", padding)
 	}
 
-	v := tea.NewView(tabBar + "\n" + content + help)
-	v.AltScreen = true // v2: 替代 tea.WithAltScreen()
+	v := tea.NewView(tabBar + "\n" + content + statusBar)
+	v.AltScreen = true
 	return v
 }
 

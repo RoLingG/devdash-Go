@@ -37,6 +37,9 @@ func (m *Model) Init(defaultCity string) tea.Cmd {
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
+// InputActive 输入框是否活跃
+func (m *Model) InputActive() bool { return m.input.Active }
+
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case Msg:
@@ -87,7 +90,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.scroll--
 			}
 		case "down", "j":
-			viewH := m.height - 6
+			viewH := m.height - 7
 			if viewH < 3 {
 				viewH = 3
 			}
@@ -258,7 +261,7 @@ func (m *Model) View() string {
 	// 滚动
 	fullContent := sb.String()
 	contentLines := strings.Split(fullContent, "\n")
-	viewH := m.height - 2 - 4
+	viewH := m.height - 2 - 5
 	if viewH < 3 {
 		viewH = 3
 	}
