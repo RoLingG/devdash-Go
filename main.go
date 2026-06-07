@@ -86,6 +86,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// 帮助面板显示时，只响应 ? 关闭，其他按键全部拦截
+		if m.helpShowing {
+			if msg.String() == "?" {
+				m.helpShowing = false
+				return m, nil
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
@@ -106,7 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// 输入框活跃时，? 透传给模块
 				break
 			}
-			m.helpShowing = !m.helpShowing
+			m.helpShowing = true
 			return m, nil
 		// 数字键切换 Tab（全局快捷键）,切换时顺便检测窗口大小，确保布局正确
 		case "1":
