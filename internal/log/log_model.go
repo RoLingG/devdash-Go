@@ -260,16 +260,24 @@ func (m *Model) View() string {
 	} else {
 		filterInfo = fmt.Sprintf(" Showing all %d lines", len(m.filtered))
 	}
-	if m.errMsg != "" {
-		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColRed).Render(m.errMsg)
-	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(filterInfo))
-	lines = append(lines, "")
-
+	// 滚动位置指示
 	viewH := m.height - 11
 	if viewH < 5 {
 		viewH = 5
 	}
+	endLine := m.scroll + viewH
+	if endLine > len(m.filtered) {
+		endLine = len(m.filtered)
+	}
+	scrollPos := fmt.Sprintf("  %d-%d/%d", m.scroll+1, endLine, len(m.filtered))
+	if m.errMsg != "" {
+		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColRed).Render(m.errMsg)
+	}
+	scrollStyle := lipgloss.NewStyle().Foreground(ui.ColMuted)
+	filterInfo += scrollStyle.Render(scrollPos)
+	lines = append(lines, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(filterInfo))
+	lines = append(lines, "")
+
 	start := m.scroll
 	end := start + viewH
 	if end > len(m.filtered) {
@@ -281,7 +289,7 @@ func (m *Model) View() string {
 
 	lines = append(lines, "")
 	lines = append(lines, m.stats())
-	//return strings.Join(lines, "\n")
+
 	return ui.Box("Log", strings.Join(lines, "\n"), m.width)
 }
 

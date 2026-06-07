@@ -25,8 +25,13 @@ func RenderTabBar(active TabState, width int) string {
 	return bar
 }
 
-// helpLine 一行快捷键提示，用分隔符连接并补齐宽度
+// helpLine 一行快捷键提示，每项固定列宽对齐后用分隔符连接
+const helpColW = 16 // 每列固定宽度，确保上下两行的 • 纵向对齐
+
 func helpLine(parts []string, width int, sep string) string {
+	for i, p := range parts {
+		parts[i] = PadRight(p, helpColW)
+	}
 	h := " " + strings.Join(parts, sep) + " "
 	styled := StyleHelp.Render(h)
 	gap := width - lipgloss.Width(styled)
