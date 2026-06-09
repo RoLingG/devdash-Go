@@ -180,7 +180,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "/":
 			m.input.Prompt = "Repository path:"
 			m.input.Open(m.repoPath)
-		case "R":
+		case "ctrl+r":
 			m.loading = true
 			m.err = nil
 			return m, func() tea.Msg { return LoadInfoFromDir(m.repoPath) }

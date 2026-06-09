@@ -76,7 +76,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			)
 		}
 		switch msg.String() {
-		case "R":
+		case "ctrl+r":
 			if m.city != "" {
 				m.loading = true
 				m.err = nil

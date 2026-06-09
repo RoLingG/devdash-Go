@@ -49,7 +49,7 @@ func RenderStatusBar(active TabState, width int) string {
 
 	switch active {
 	case TabGit:
-		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ repo", "R refresh", "? help"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ repo", "ctrl+r refresh", "? help"}, width, sep)
 		line2 := helpLine([]string{"1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
 		return line1 + "\n" + line2
 
@@ -59,12 +59,12 @@ func RenderStatusBar(active TabState, width int) string {
 		return line1 + "\n" + line2
 
 	case TabWeather:
-		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ city", "R refresh", "? help"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ city", "ctrl+r refresh", "? help"}, width, sep)
 		line2 := helpLine([]string{"1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabConfig:
-		line1 := helpLine([]string{"\u2191\u2193 move", "enter toggle", "/ open", "type search", "? help"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 move", "enter toggle", "/ open", "ctrl+r refresh", "? help"}, width, sep)
 		line2 := helpLine([]string{"Esc clear", "1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
 		return line1 + "\n" + line2
 	}

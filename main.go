@@ -97,9 +97,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
-		// ctrl+r 手动触发窗口大小检测（Windows 不支持 SIGWINCH）
+		// ctrl+r 手动触发窗口大小检测 + 透传给当前模块（如 log 模块用它刷新）
 		case "ctrl+r":
-			return m, func() tea.Msg { return tea.RequestWindowSize() }
+			cmds = append(cmds, func() tea.Msg { return tea.RequestWindowSize() })
 		// ctrl+s 保存当前配置
 		case "ctrl+s":
 			if err := ui.SaveConfig(m.appCfg); err != nil {

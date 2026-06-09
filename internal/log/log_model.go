@@ -434,7 +434,7 @@ func (m *Model) View() string {
 		m.scrollOff = 0
 	}
 	// 防御性代码，防止特殊情况超出可视边界，导致内容下方出现空白行
-	if m.scrollOff > len(wrappedLines)-maxVisible {
+	if len(wrappedLines) > maxVisible && m.scrollOff > len(wrappedLines)-maxVisible {
 		m.scrollOff = len(wrappedLines) - maxVisible
 	}
 

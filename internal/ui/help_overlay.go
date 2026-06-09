@@ -24,7 +24,7 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 
 	items := map[TabState][]HelpItem{
 		TabGit: {
-			{"↑↓", "scroll commits"}, {"/", "change repo"}, {"R", "refresh"},
+			{"↑↓", "scroll commits"}, {"/", "change repo"}, {"ctrl+r", "refresh"},
 			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
@@ -36,13 +36,13 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabWeather: {
-			{"↑↓", "scroll content"}, {"/", "change city"}, {"R", "refresh"},
+			{"↑↓", "scroll content"}, {"/", "change city"}, {"ctrl+r", "refresh"},
 			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabConfig: {
 			{"↑↓", "move cursor"}, {"enter", "toggle node"}, {"/", "open file"},
-			{"type", "search filter"}, {"Esc", "clear search"},
+			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"Esc", "clear search"},
 			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},

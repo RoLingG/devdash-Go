@@ -153,6 +153,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "enter":
 			m.toggleNode(m.cursor)
 			m.rebuildLines()
+		case "ctrl+r":
+			if m.configPath != "" {
+				return m, LoadFileCmd(m.configPath)
+			}
 		case "/":
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.configPath)
@@ -226,7 +230,7 @@ func (m *Model) View() string {
 	headerLines := 0
 	if m.loaded {
 		nodes := countNodes(m.root)
-		info := fmt.Sprintf("📂 %s  •  %d nodes  •  %d/%d", m.configPath, nodes, m.cursor+1, len(m.lines))
+		info := fmt.Sprintf("📂 %s • %d nodes • %d/%d", m.configPath, nodes, m.cursor+1, len(m.lines))
 		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  " + info))
 		sb.WriteString("\n\n")
 		headerLines += 2
