@@ -54,8 +54,8 @@ func RenderStatusBar(active TabState, width int) string {
 		return line1 + "\n" + line2
 
 	case TabLog:
-		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ open", "type filter", "Esc clear", "? help"}, width, sep)
-		line2 := helpLine([]string{"R refresh", "1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 cursor", "[ ] page", "ctrl+\u2191\u2193 fast", "ctrl+p jump", "/ open"}, width, sep)
+		line2 := helpLine([]string{"type filter", "Esc clear", "ctrl+r refresh", "1/2/3/4 switch", "ctrl+q quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabWeather:

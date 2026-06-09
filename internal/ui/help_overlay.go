@@ -29,9 +29,10 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabLog: {
-			{"↑↓", "scroll lines"}, {"/", "open path"}, {"type", "filter"},
-			{"Esc", "clear filter"}, {"R", "refresh"},
-			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
+			{"↑↓", "cursor in page"}, {"[ ]", "prev/next page"},
+			{"ctrl+↑↓", "fast ±10 pages"}, {"ctrl+p", "jump to page"},
+			{"/", "open path"}, {"type", "filter"}, {"Esc", "clear filter"},
+			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabWeather: {

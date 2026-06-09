@@ -116,18 +116,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.helpShowing = true
 			return m, nil
-		// 数字键切换 Tab（全局快捷键）,切换时顺便检测窗口大小，确保布局正确
-		case "1":
-			m.state = ui.TabGit
-			return m, func() tea.Msg { return tea.RequestWindowSize() }
-		case "2":
-			m.state = ui.TabLog
-			return m, func() tea.Msg { return tea.RequestWindowSize() }
-		case "3":
-			m.state = ui.TabWeather
-			return m, func() tea.Msg { return tea.RequestWindowSize() }
-		case "4":
-			m.state = ui.TabConfig
+		// 数字键切换 Tab（全局快捷键），输入框活跃时透传给当前模块
+		case "1", "2", "3", "4":
+			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() {
+				break // 透传给模块处理
+			}
+			switch msg.String() {
+			case "1":
+				m.state = ui.TabGit
+			case "2":
+				m.state = ui.TabLog
+			case "3":
+				m.state = ui.TabWeather
+			case "4":
+				m.state = ui.TabConfig
+			}
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
 		}
 	}

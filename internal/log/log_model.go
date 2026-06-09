@@ -20,16 +20,43 @@ type Model struct {
 	filtered []Line
 	width    int
 	height   int
-	scroll   int
 	filter   string
 	loaded   bool
 	errMsg   string
 	logPath  string
 
+	page      int
+	cursor    int
+	pageSize  int
+	scrollOff int
+
+	pageInput      bool
+	pageInputValue string
+
 	input      component.InputModel
 	dirListing bool
 	dirPath    string
 	dirList    component.ListModel
+}
+
+const logPageSize = 10
+
+func (m *Model) totalPages() int {
+	n := len(m.filtered)
+	if n == 0 {
+		return 1
+	}
+	return (n + logPageSize - 1) / logPageSize
+}
+
+func (m *Model) clampPage() {
+	tp := m.totalPages()
+	if m.page >= tp {
+		m.page = tp - 1
+	}
+	if m.page < 0 {
+		m.page = 0
+	}
 }
 
 func (m *Model) Init(lastLogPath string) tea.Cmd {
@@ -57,7 +84,7 @@ func (m *Model) Init(lastLogPath string) tea.Cmd {
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
 // InputActive 输入框是否活跃
-func (m *Model) InputActive() bool { return m.input.Active }
+func (m *Model) InputActive() bool { return m.input.Active || m.pageInput }
 
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -78,10 +105,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.input.Active = false
 		m.dirListing = false
 		m.errMsg = ""
-		m.scroll = len(m.filtered) - (m.height - 9)
-		if m.scroll < 0 {
-			m.scroll = 0
-		}
+		// 默认显示最后一页
+		m.page = m.totalPages() - 1
+		m.cursor = 0
+		m.pageSize = logPageSize
 
 	case DirMsg:
 		if msg.Files == nil || len(msg.Files) == 0 {
@@ -130,6 +157,34 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// 页码跳转输入模式
+		if m.pageInput {
+			switch key {
+			case "enter":
+				m.pageInput = false
+				var pageNum int
+				if _, err := fmt.Sscanf(m.pageInputValue, "%d", &pageNum); err == nil {
+					m.page = pageNum - 1
+					m.clampPage()
+					m.cursor = 0
+					m.scrollOff = 0
+				}
+				m.pageInputValue = ""
+			case "esc":
+				m.pageInput = false
+				m.pageInputValue = ""
+			case "backspace":
+				if len(m.pageInputValue) > 0 {
+					m.pageInputValue = m.pageInputValue[:len(m.pageInputValue)-1]
+				}
+			default:
+				if len(key) == 1 && key >= "0" && key <= "9" {
+					m.pageInputValue += key
+				}
+			}
+			return m, nil
+		}
+
 		if m.input.Active {
 			return m, tea.Batch(
 				m.input.Update(msg, func(path string) func() tea.Msg {
@@ -154,22 +209,55 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 
 		switch key {
+		// 页内光标移动
 		case "up", "k":
-			if m.scroll > 0 {
-				m.scroll--
+			if m.cursor > 0 {
+				m.cursor--
 			}
 		case "down", "j":
-			maxScroll := len(m.filtered) - (m.height - 9)
-			if maxScroll < 0 {
-				maxScroll = 0
+			start := m.page * logPageSize
+			end := start + logPageSize
+			if end > len(m.filtered) {
+				end = len(m.filtered)
 			}
-			if m.scroll < maxScroll {
-				m.scroll++
+			pageEntries := end - start
+			if m.cursor < pageEntries-1 {
+				m.cursor++
 			}
+		// 翻页
+		case "[":
+			if m.page > 0 {
+				m.page--
+				m.cursor = 0
+				m.scrollOff = 0
+			}
+		case "]":
+			if m.page < m.totalPages()-1 {
+				m.page++
+				m.cursor = 0
+				m.scrollOff = 0
+			}
+		case "ctrl+up":
+			m.page -= 10
+			if m.page < 0 {
+				m.page = 0
+			}
+			m.cursor = 0
+			m.scrollOff = 0
+		case "ctrl+down":
+			m.page += 10
+			m.clampPage()
+			m.cursor = 0
+			m.scrollOff = 0
+		// 页码跳转
+		case "ctrl+p":
+			m.pageInput = true
+			m.pageInputValue = ""
+		// 其他功能键
 		case "/":
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.logPath)
-		case "R":
+		case "ctrl+r":
 			if m.logPath != "" {
 				return m, func() tea.Msg { return LoadFromFile(m.logPath) }
 			}
@@ -178,7 +266,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "esc":
 			m.filter = ""
 			m.filtered = m.all
-			m.scroll = 0
+			m.page = m.totalPages() - 1
+			m.cursor = 0
 		case "backspace":
 			if ui.RuneLen(m.filter) > 0 {
 				runes := []rune(m.filter)
@@ -198,7 +287,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 func (m *Model) applyFilter() {
 	if m.filter == "" {
 		m.filtered = m.all
-		m.scroll = 0
+		m.page = m.totalPages() - 1
+		m.cursor = 0
 		return
 	}
 	re, err := regexp.Compile(m.filter)
@@ -214,7 +304,8 @@ func (m *Model) applyFilter() {
 		}
 	}
 	m.filtered = filtered
-	m.scroll = 0
+	m.page = m.totalPages() - 1
+	m.cursor = 0
 }
 
 func (m *Model) View() string {
@@ -247,6 +338,18 @@ func (m *Model) View() string {
 		})
 	}
 
+	// 页码跳转输入模式
+	if m.pageInput {
+		inputStyle := lipgloss.NewStyle().Foreground(ui.ColAccent)
+		mutedStyle := lipgloss.NewStyle().Foreground(ui.ColMuted)
+		content := fmt.Sprintf("\n  %s %s%s\n\n  %s",
+			inputStyle.Render("Go to page:"),
+			inputStyle.Render(m.pageInputValue),
+			inputStyle.Render("|"),
+			mutedStyle.Render("Enter confirm  Esc cancel"))
+		return ui.Card("Page Jump", content, ui.ColAccent, cardWidth)
+	}
+
 	// 未加载
 	if !m.loaded {
 		emptyContent := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  Press '/' to enter log file path")
@@ -254,42 +357,96 @@ func (m *Model) View() string {
 	}
 
 	var lines []string
-	filterInfo := ""
-	if m.filter != "" {
-		filterInfo = fmt.Sprintf(" Filter: %s (%d/%d lines)", m.filter, len(m.filtered), len(m.all))
-	} else {
-		filterInfo = fmt.Sprintf(" Showing all %d lines", len(m.filtered))
-	}
-	// 滚动位置指示
-	viewH := m.height - 11
-	if viewH < 5 {
-		viewH = 5
-	}
-	endLine := m.scroll + viewH
-	if endLine > len(m.filtered) {
-		endLine = len(m.filtered)
-	}
-	scrollPos := fmt.Sprintf("  %d-%d/%d", m.scroll+1, endLine, len(m.filtered))
-	if m.errMsg != "" {
-		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColRed).Render(m.errMsg)
-	}
-	scrollStyle := lipgloss.NewStyle().Foreground(ui.ColMuted)
-	filterInfo += scrollStyle.Render(scrollPos)
-	lines = append(lines, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(filterInfo))
-	lines = append(lines, "")
 
-	start := m.scroll
-	end := start + viewH
+	// 页信息
+	start := m.page * logPageSize
+	end := start + logPageSize
 	if end > len(m.filtered) {
 		end = len(m.filtered)
 	}
-	for _, l := range m.filtered[start:end] {
-		lines = append(lines, colorizeLog(l))
+	totalP := m.totalPages()
+
+	// 标题行：过滤信息 + 页码
+	filterInfo := ""
+	if m.filter != "" {
+		filterInfo = fmt.Sprintf(" Filter: %s (%d/%d)", m.filter, len(m.filtered), len(m.all))
+	} else {
+		filterInfo = fmt.Sprintf(" %d entries", len(m.filtered))
 	}
+	pageInfo := fmt.Sprintf("Page %d/%d  [%d-%d/%d]", m.page+1, totalP, start+1, end, len(m.filtered))
+	if m.errMsg != "" {
+		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColRed).Render(m.errMsg)
+	}
+	headerLine := lipgloss.NewStyle().Foreground(ui.ColAccent).Render(filterInfo) +
+		lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  "+pageInfo)
+	lines = append(lines, headerLine)
+	lines = append(lines, "")
+
+	maxRawW := m.width - 12
+	if maxRawW < 10 {
+		maxRawW = 10
+	}
+
+	// 构建当前页所有换行后的渲染行
+	cursorStyle := lipgloss.NewStyle().Foreground(ui.ColPrimary).Bold(true)
+	var wrappedLines []string
+	cursorLine := 0
+	cursorEndLine := 0
+	foundCursor := false
+	for i := start; i < end; i++ {
+		l := m.filtered[i]
+		wrapped := wrapLine(l.Raw, maxRawW)
+		isCursor := i-start == m.cursor
+		if isCursor {
+			cursorLine = len(wrappedLines)
+			cursorEndLine = cursorLine + len(wrapped)
+			foundCursor = true
+		}
+		for j, wl := range wrapped {
+			colored := colorizeLog(Line{Level: l.Level, Raw: wl})
+			if isCursor {
+				if j == 0 {
+					wrappedLines = append(wrappedLines, cursorStyle.Render(">")+colored)
+				} else {
+					wrappedLines = append(wrappedLines, cursorStyle.Render(" ")+colored)
+				}
+			} else {
+				wrappedLines = append(wrappedLines, "  "+colored)
+			}
+		}
+	}
+
+	// Box 可显示内容行 = (m.height - 3) - Box开销(4) - header+空行(2) - 空行+stats(2)
+	maxVisible := m.height - 3 - 4 - 2 - 2
+	if maxVisible < 1 {
+		maxVisible = 1
+	}
+
+	// 自动调整 scrollOff 确保 cursor 全部行可见
+	if foundCursor {
+		if cursorLine < m.scrollOff {
+			m.scrollOff = cursorLine
+		} else if cursorEndLine > m.scrollOff+maxVisible {
+			m.scrollOff = cursorEndLine - maxVisible
+		}
+	}
+	if m.scrollOff < 0 {
+		m.scrollOff = 0
+	}
+	// 防御性代码，防止特殊情况超出可视边界，导致内容下方出现空白行
+	if m.scrollOff > len(wrappedLines)-maxVisible {
+		m.scrollOff = len(wrappedLines) - maxVisible
+	}
+
+	// 截取可见部分
+	visibleEnd := m.scrollOff + maxVisible
+	if visibleEnd > len(wrappedLines) {
+		visibleEnd = len(wrappedLines)
+	}
+	lines = append(lines, wrappedLines[m.scrollOff:visibleEnd]...)
 
 	lines = append(lines, "")
 	lines = append(lines, m.stats())
-
 	return ui.Box("Log", strings.Join(lines, "\n"), m.width)
 }
 
@@ -305,6 +462,31 @@ func (m *Model) stats() string {
 		lipgloss.NewStyle().Foreground(ui.ColMuted).Render(fmt.Sprintf("DEBUG:%d", counts["DEBUG"])),
 		fmt.Sprintf("OTHER:%d", counts["OTHER"]),
 	)
+}
+
+// wrapLine 按可见宽度将长行切为多行（纯文本，不含 ANSI 码）
+func wrapLine(s string, maxW int) []string {
+	if maxW < 1 || lipgloss.Width(s) <= maxW {
+		return []string{s}
+	}
+	var result []string
+	runes := []rune(s)
+	w := 0
+	start := 0
+	for i, r := range runes {
+		rw := lipgloss.Width(string(r))
+		if w+rw > maxW {
+			result = append(result, string(runes[start:i]))
+			start = i
+			w = rw
+		} else {
+			w += rw
+		}
+	}
+	if start < len(runes) {
+		result = append(result, string(runes[start:]))
+	}
+	return result
 }
 
 func colorizeLog(l Line) string {
