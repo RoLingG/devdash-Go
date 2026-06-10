@@ -73,6 +73,9 @@ type Model struct {
 	dirList    component.ListModel
 }
 
+// SetRecent 设置最近记录列表（转发给 InputModel）
+func (m *Model) SetRecent(items []string) { m.input.SetRecent(items) }
+
 func (m *Model) Init(defaultRepo string) tea.Cmd {
 	if defaultRepo == "" {
 		defaultRepo = "."
@@ -214,12 +217,14 @@ func (m *Model) View() string {
 			errMsg = m.err.Error()
 		}
 		return ui.RenderInputCard(ui.InputCardOpts{
-			Title:     "Change Repository",
-			Prompt:    m.input.Prompt,
-			Value:     m.input.Value,
-			Cursor:    m.input.Cursor,
-			ErrMsg:    errMsg,
-			CardWidth: cardWidth,
+			Title:       "Change Repository",
+			Prompt:      m.input.Prompt,
+			Value:       m.input.Value,
+			Cursor:      m.input.Cursor,
+			ErrMsg:      errMsg,
+			CardWidth:   cardWidth,
+			RecentItems: m.input.RecentItems,
+			RecentIdx:   m.input.RecentIdx(),
 		})
 	}
 

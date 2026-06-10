@@ -15,15 +15,15 @@ import (
 
 // Model 天气面板模块状态
 type Model struct {
-	data    *WttrResponse
-	width   int
-	height  int
-	loaded  bool
-	loading bool
-	err     error
-	city    string
-	input   component.InputModel
-	scroll  int
+	data        *WttrResponse
+	width       int
+	height      int
+	loaded      bool
+	loading     bool
+	err         error
+	city   string
+	input  component.InputModel
+	scroll int
 }
 
 func (m *Model) Init(defaultCity string) tea.Cmd {
@@ -36,6 +36,9 @@ func (m *Model) Init(defaultCity string) tea.Cmd {
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
+
+// SetRecent 设置最近记录列表（转发给 InputModel）
+func (m *Model) SetRecent(items []string) { m.input.SetRecent(items) }
 
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Active }
@@ -115,11 +118,13 @@ func (m *Model) View() string {
 	// 输入框卡片
 	if m.input.Active {
 		return ui.RenderInputCard(ui.InputCardOpts{
-			Title:     "Change City",
-			Prompt:    m.input.Prompt,
-			Value:     m.input.Value,
-			Cursor:    m.input.Cursor,
-			CardWidth: cardWidth,
+			Title:       "Change City",
+			Prompt:      m.input.Prompt,
+			Value:       m.input.Value,
+			Cursor:      m.input.Cursor,
+			CardWidth:   cardWidth,
+			RecentItems: m.input.RecentItems,
+			RecentIdx:   m.input.RecentIdx(),
 		})
 	}
 

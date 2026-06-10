@@ -53,12 +53,14 @@ func BarChart(label string, value, maxValue, barMaxWidth int, barColor lipgloss.
 
 // InputCardOpts 输入框卡片的渲染参数
 type InputCardOpts struct {
-	Title     string // 卡片标题，如 "Change City"
-	Prompt    string // 输入提示文字，如 "City:"
-	Value     string // 当前输入内容
-	Cursor    int    // 光标位置（rune 索引）
-	ErrMsg    string // 错误信息，为空则不显示
-	CardWidth int    // 卡片宽度
+	Title       string   // 卡片标题
+	Prompt      string   // 输入提示文字
+	Value       string   // 当前输入内容
+	Cursor      int      // 光标位置（rune 索引）
+	ErrMsg      string   // 错误信息，为空则不显示
+	CardWidth   int      // 卡片宽度
+	RecentItems []string // 最近记录列表
+	RecentIdx   int      // 当前选中的最近记录索引，-1 表示未选择
 }
 
 // RenderInputCard 渲染统一的输入框卡片
@@ -71,14 +73,41 @@ func RenderInputCard(opts InputCardOpts) string {
 	after := RuneSubstr(opts.Value, opts.Cursor, RuneLen(opts.Value))
 	inputLine := "  > " + before + lipgloss.NewStyle().Foreground(ColAccent).Render("|") + after
 	sb.WriteString(lipgloss.NewStyle().Foreground(ColText).Render(inputLine))
-	sb.WriteString("\n\n")
+	sb.WriteString("\n")
+
+	// 渲染最近记录列表
+	if len(opts.RecentItems) > 0 {
+		sb.WriteString("\n")
+		sb.WriteString(lipgloss.NewStyle().Foreground(ColMuted).Render("  Recent:"))
+		sb.WriteString("\n")
+		for i, item := range opts.RecentItems {
+			marker := "  "
+			style := lipgloss.NewStyle().Foreground(ColMuted)
+			if i == opts.RecentIdx {
+				marker = lipgloss.NewStyle().Foreground(ColAccent).Render("▸ ")
+				style = lipgloss.NewStyle().Foreground(ColText).Bold(true)
+			} else {
+				marker = "  "
+			}
+			// 截断过长路径
+			display := item
+			maxW := opts.CardWidth - 8
+			if maxW > 10 && RuneLen(display) > maxW {
+				display = RuneSubstr(display, 0, maxW-3) + "..."
+			}
+			sb.WriteString(marker + style.Render(display))
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("\n")
 
 	if opts.ErrMsg != "" {
 		sb.WriteString("  " + lipgloss.NewStyle().Foreground(ColRed).Render("✗ "+opts.ErrMsg))
 		sb.WriteString("\n\n")
 	}
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(ColMuted).Render("  Enter confirm  ←→ cursor  Home/End  Esc cancel"))
+	sb.WriteString(lipgloss.NewStyle().Foreground(ColMuted).Render("  Enter confirm  ↑↓ recent  ←→ cursor  Home/End  Esc cancel"))
 	return Card(opts.Title, sb.String(), ColSecondary, opts.CardWidth)
 }
 

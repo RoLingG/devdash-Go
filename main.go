@@ -42,6 +42,12 @@ type model struct {
 // Init 应用启动时执行的初始化命令
 // 返回一个 Batch 命令，同时初始化所有子模块
 func (m model) Init() tea.Cmd {
+	// 首次同步最近记录到各模块
+	m.git.SetRecent(m.appCfg.RecentRepos)
+	m.log.SetRecent(m.appCfg.RecentLogFiles)
+	m.config.SetRecent(m.appCfg.RecentConfigFiles)
+	m.weather.SetRecent(m.appCfg.RecentCities)
+
 	return tea.Batch(
 		m.git.Init(m.appCfg.DefaultRepo),
 		m.log.Init(m.appCfg.LastLogPath),
@@ -61,15 +67,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Key {
 		case "city":
 			m.appCfg.DefaultCity = msg.Value
+			m.appCfg.RecentCities = ui.AddToRecent(m.appCfg.RecentCities, msg.Value, 10)
+			m.weather.SetRecent(m.appCfg.RecentCities)
 		case "repo":
 			m.appCfg.DefaultRepo = msg.Value
 			m.appCfg.RecentRepos = ui.AddToRecent(m.appCfg.RecentRepos, msg.Value, 10)
+			m.git.SetRecent(m.appCfg.RecentRepos)
 		case "logPath":
 			m.appCfg.LastLogPath = msg.Value
 			m.appCfg.RecentLogFiles = ui.AddToRecent(m.appCfg.RecentLogFiles, msg.Value, 10)
+			m.log.SetRecent(m.appCfg.RecentLogFiles)
 		case "configPath":
 			m.appCfg.LastConfigPath = msg.Value
 			m.appCfg.RecentConfigFiles = ui.AddToRecent(m.appCfg.RecentConfigFiles, msg.Value, 10)
+			m.config.SetRecent(m.appCfg.RecentConfigFiles)
 		}
 		return m, nil
 	}

@@ -39,6 +39,9 @@ type Model struct {
 	dirList    component.ListModel
 }
 
+// SetRecent 设置最近记录列表（转发给 InputModel）
+func (m *Model) SetRecent(items []string) { m.input.SetRecent(items) }
+
 const logPageSize = 10
 
 func (m *Model) totalPages() int {
@@ -329,12 +332,14 @@ func (m *Model) View() string {
 	// 路径输入模式
 	if m.input.Active {
 		return ui.RenderInputCard(ui.InputCardOpts{
-			Title:     "Open Log",
-			Prompt:    m.input.Prompt,
-			Value:     m.input.Value,
-			Cursor:    m.input.Cursor,
-			ErrMsg:    m.errMsg,
-			CardWidth: cardWidth,
+			Title:       "Open Log",
+			Prompt:      m.input.Prompt,
+			Value:       m.input.Value,
+			Cursor:      m.input.Cursor,
+			ErrMsg:      m.errMsg,
+			CardWidth:   cardWidth,
+			RecentItems: m.input.RecentItems,
+			RecentIdx:   m.input.RecentIdx(),
 		})
 	}
 

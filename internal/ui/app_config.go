@@ -28,6 +28,7 @@ type AppConfig struct {
 	RecentRepos       []string `json:"recent_repos"`
 	RecentLogFiles    []string `json:"recent_log_files"`
 	RecentConfigFiles []string `json:"recent_config_files"`
+	RecentCities      []string `json:"recent_cities"`
 }
 
 // configFileName 配置文件名
@@ -60,6 +61,7 @@ func DefaultConfig() AppConfig {
 		RecentRepos:       []string{},
 		RecentLogFiles:    []string{},
 		RecentConfigFiles: []string{},
+		RecentCities:      []string{},
 	}
 }
 
@@ -85,6 +87,9 @@ func LoadConfig() (AppConfig, error) {
 	}
 	if cfg.RecentConfigFiles == nil {
 		cfg.RecentConfigFiles = []string{}
+	}
+	if cfg.RecentCities == nil {
+		cfg.RecentCities = []string{}
 	}
 
 	return cfg, nil
