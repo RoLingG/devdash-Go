@@ -259,13 +259,13 @@ func (m *Model) View() string {
 	if top < 5 {
 		top = 5
 	}
+	if m.scroll > len(lines)-top {
+		m.scroll = len(lines) - top
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
 	start := m.scroll
-	if start > len(lines)-top {
-		start = len(lines) - top
-	}
-	if start < 0 {
-		start = 0
-	}
 	end := start + top
 	if end > len(lines) {
 		end = len(lines)

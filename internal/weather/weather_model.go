@@ -261,11 +261,13 @@ func (m *Model) View() string {
 	// 滚动
 	fullContent := sb.String()
 	contentLines := strings.Split(fullContent, "\n")
-	viewH := m.height - 2 - 5
+	// Tab 栏：1 行; 状态栏：2 行; Card 边框 + 标题：4 行
+	viewH := m.height - 7
 	if viewH < 3 {
 		viewH = 3
 	}
 	totalLines := len(contentLines)
+	// 防止过多滚动导致视图溢出
 	if m.scroll > totalLines-viewH {
 		m.scroll = totalLines - viewH
 	}
