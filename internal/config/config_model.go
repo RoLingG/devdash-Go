@@ -172,6 +172,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.filter = string(runes[:len(runes)-1])
 				m.rebuildLines()
 			}
+		case "ctrl+n":
+			m.jumpNextMatch()
+		case "ctrl+b":
+			m.jumpPrevMatch()
 		default:
 			if len(key) == 1 && key >= " " {
 				m.filter += key
@@ -296,6 +300,52 @@ func (m *Model) clampScroll() {
 	}
 }
 
+// jumpNextMatch 跳转到下一个 filter 匹配的行
+func (m *Model) jumpNextMatch() {
+	if m.filter == "" || len(m.lines) == 0 {
+		return
+	}
+	f := strings.ToLower(m.filter)
+	for i := m.cursor + 1; i < len(m.lines); i++ {
+		if strings.Contains(strings.ToLower(m.lines[i]), f) {
+			m.cursor = i
+			m.clampScroll()
+			return
+		}
+	}
+	// 没找到则从头搜索到当前位置
+	for i := 0; i <= m.cursor; i++ {
+		if strings.Contains(strings.ToLower(m.lines[i]), f) {
+			m.cursor = i
+			m.clampScroll()
+			return
+		}
+	}
+}
+
+// jumpPrevMatch 跳转到上一个 filter 匹配的行
+func (m *Model) jumpPrevMatch() {
+	if m.filter == "" || len(m.lines) == 0 {
+		return
+	}
+	f := strings.ToLower(m.filter)
+	for i := m.cursor - 1; i >= 0; i-- {
+		if strings.Contains(strings.ToLower(m.lines[i]), f) {
+			m.cursor = i
+			m.clampScroll()
+			return
+		}
+	}
+	// 没找到则从末尾搜索到当前位置
+	for i := len(m.lines) - 1; i >= m.cursor; i-- {
+		if strings.Contains(strings.ToLower(m.lines[i]), f) {
+			m.cursor = i
+			m.clampScroll()
+			return
+		}
+	}
+}
+
 func (m *Model) toggleNode(idx int) {
 	if idx < 0 || idx >= len(m.lines) {
 		return
@@ -325,16 +375,18 @@ func Flatten(node Node, filter string) []string {
 				}
 				count := fmt.Sprintf(" [%d]", len(node.Children))
 				suffix := lipgloss.NewStyle().Foreground(ui.ColMuted).Render(count)
-				lines = append(lines, indent+icon+" "+lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(node.Key)+": "+suffix)
+				styledKey := lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(HighlightMatch(node.Key, filter))
+				lines = append(lines, indent+icon+" "+styledKey+": "+suffix)
 				if node.Expanded || (f != "" && matchesChild) {
 					lines = append(lines, childLines...)
 				}
 			}
 		} else {
-			valStr := ColorizeValue(node.Value)
+			valStr := ColorizeValueWithHighlight(node.Value, filter)
 			valLower := strings.ToLower(fmt.Sprintf("%v", node.Value))
 			if f == "" || strings.Contains(keyLower, f) || strings.Contains(valLower, f) {
-				lines = append(lines, indent+"  "+lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(node.Key)+": "+valStr)
+				styledKey := lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(HighlightMatch(node.Key, filter))
+				lines = append(lines, indent+"  "+styledKey+": "+valStr)
 			}
 		}
 	} else {
@@ -402,6 +454,47 @@ func ColorizeValue(val interface{}) string {
 		return lipgloss.NewStyle().Foreground(ui.ColMuted).Render("null")
 	default:
 		return fmt.Sprintf("%v", v)
+	}
+}
+
+// HighlightMatch 对纯文本中匹配 filter 的子串用黄色背景高亮
+func HighlightMatch(plainText, filter string) string {
+	if filter == "" {
+		return plainText
+	}
+	lower := strings.ToLower(plainText)
+	f := strings.ToLower(filter)
+	idx := strings.Index(lower, f)
+	if idx < 0 {
+		return plainText
+	}
+	highlight := lipgloss.NewStyle().Background(ui.ColAccent).Foreground(ui.ColText)
+	before := plainText[:idx]
+	match := highlight.Render(plainText[idx : idx+len(filter)])
+	after := plainText[idx+len(filter):]
+	return before + match + after
+}
+
+// ColorizeValueWithHighlight 先高亮 value 的纯文本，再套类型颜色
+func ColorizeValueWithHighlight(val interface{}, filter string) string {
+	if filter == "" {
+		return ColorizeValue(val)
+	}
+	switch v := val.(type) {
+	case string:
+		highlighted := HighlightMatch(v, filter)
+		return lipgloss.NewStyle().Foreground(ui.ColGreen).Render(`"` + highlighted + `"`)
+	case float64:
+		highlighted := HighlightMatch(fmt.Sprintf("%g", v), filter)
+		return lipgloss.NewStyle().Foreground(ui.ColAccent).Render(highlighted)
+	case bool:
+		highlighted := HighlightMatch(fmt.Sprintf("%t", v), filter)
+		return lipgloss.NewStyle().Foreground(ui.ColRed).Render(highlighted)
+	case nil:
+		return lipgloss.NewStyle().Foreground(ui.ColMuted).Render("null")
+	default:
+		highlighted := HighlightMatch(fmt.Sprintf("%v", v), filter)
+		return highlighted
 	}
 }
 

@@ -64,8 +64,8 @@ func RenderStatusBar(active TabState, width int) string {
 		return line1 + "\n" + line2
 
 	case TabConfig:
-		line1 := helpLine([]string{"\u2191\u2193 move", "enter toggle", "/ open", "ctrl+r refresh", "? help"}, width, sep)
-		line2 := helpLine([]string{"Esc clear", "1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 move", "enter toggle", "/ open", "ctrl+n/b match", "ctrl+r refresh"}, width, sep)
+		line2 := helpLine([]string{"Esc clear", "? help", "1/2/3/4 switch", "ctrl+q quit"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""

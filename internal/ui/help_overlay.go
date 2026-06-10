@@ -42,7 +42,8 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 		},
 		TabConfig: {
 			{"↑↓", "move cursor"}, {"enter", "toggle node"}, {"/", "open file"},
-			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"Esc", "clear search"},
+			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"ctrl+n/b", "next/prev match"},
+			{"Esc", "clear search"},
 			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
