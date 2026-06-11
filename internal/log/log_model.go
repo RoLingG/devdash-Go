@@ -37,12 +37,30 @@ type Model struct {
 	dirListing bool
 	dirPath    string
 	dirList    component.ListModel
+
+	levelOverlay bool         // level filter 选择界面是否打开
+	levelIdx     int          // 当前光标位置（0=All, 1=INFO, 2=WARN, 3=ERROR, 4=DEBUG）
+	levelSel     map[int]bool // level filter 多选状态
 }
+
+const logPageSize = 10
 
 // SetRecent 设置最近记录列表（转发给 InputModel）
 func (m *Model) SetRecent(items []string) { m.input.SetRecent(items) }
 
-const logPageSize = 10
+// levelOpts level filter 选项
+var levelOpts = []string{"ALL", "INFO", "WARN", "ERROR", "DEBUG"}
+
+// selectedLevels 返回当前选中的级别切片，空切片表示 ALL
+func (m *Model) selectedLevels() []string {
+	var levels []string
+	for i := 1; i < len(levelOpts); i++ {
+		if m.levelSel[i] {
+			levels = append(levels, levelOpts[i])
+		}
+	}
+	return levels
+}
 
 func (m *Model) totalPages() int {
 	n := len(m.filtered)
@@ -103,15 +121,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			lines = SampleLogLines()
 		}
 		m.all = lines
-		m.filtered = lines
 		m.loaded = true
 		m.input.Active = false
 		m.dirListing = false
 		m.errMsg = ""
-		// 默认显示最后一页
-		m.page = m.totalPages() - 1
-		m.cursor = 0
 		m.pageSize = logPageSize
+		m.applyFilter()
 
 	case DirMsg:
 		if msg.Files == nil || len(msg.Files) == 0 {
@@ -188,6 +203,31 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Level filter 选择界面
+		if m.levelOverlay {
+			switch key {
+			case "up", "k":
+				if m.levelIdx > 0 {
+					m.levelIdx--
+				}
+			case "down", "j":
+				if m.levelIdx < len(levelOpts)-1 {
+					m.levelIdx++
+				}
+			case "enter", " ":
+				if m.levelIdx == 0 {
+					// All — 清除所有选中
+					m.levelSel = map[int]bool{}
+				} else {
+					m.levelSel[m.levelIdx] = !m.levelSel[m.levelIdx]
+				}
+				m.applyFilter()
+			case "esc", "ctrl+l":
+				m.levelOverlay = false
+			}
+			return m, nil
+		}
+
 		if m.input.Active {
 			return m, tea.Batch(
 				m.input.Update(msg, func(path string) func() tea.Msg {
@@ -213,11 +253,11 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 		switch key {
 		// 页内光标移动
-		case "up", "k":
+		case "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down", "j":
+		case "down":
 			start := m.page * logPageSize
 			end := start + logPageSize
 			if end > len(m.filtered) {
@@ -240,6 +280,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.cursor = 0
 				m.scrollOff = 0
 			}
+		// 快速翻页
 		case "ctrl+up":
 			m.page -= 10
 			if m.page < 0 {
@@ -257,6 +298,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.pageInput = true
 			m.pageInputValue = ""
 		// 其他功能键
+		case "ctrl+l":
+			m.levelOverlay = true
+			m.levelIdx = 0
+			if m.levelSel == nil {
+				m.levelSel = map[int]bool{}
+			}
 		case "/":
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.logPath)
@@ -268,9 +315,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.applyFilter()
 		case "esc":
 			m.filter = ""
-			m.filtered = m.all
-			m.page = m.totalPages() - 1
-			m.cursor = 0
+			m.applyFilter()
 		case "backspace":
 			if ui.RuneLen(m.filter) > 0 {
 				runes := []rune(m.filter)
@@ -288,25 +333,41 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 }
 
 func (m *Model) applyFilter() {
-	if m.filter == "" {
-		m.filtered = m.all
-		m.page = m.totalPages() - 1
-		m.cursor = 0
-		return
-	}
-	re, err := regexp.Compile(m.filter)
-	if err != nil {
-		m.errMsg = "Invalid regex"
-		return
-	}
-	m.errMsg = ""
-	var filtered []Line
-	for _, line := range m.all {
-		if re.MatchString(line.Raw) {
-			filtered = append(filtered, line)
+	// level 过滤
+	levels := m.selectedLevels()
+	result := m.all
+	if len(levels) > 0 {
+		levelSet := map[string]bool{}
+		for _, l := range levels {
+			levelSet[l] = true
 		}
+		var byLevel []Line
+		for _, line := range m.all {
+			if levelSet[line.Level] {
+				byLevel = append(byLevel, line)
+			}
+		}
+		result = byLevel
 	}
-	m.filtered = filtered
+
+	// 正则过滤
+	if m.filter != "" {
+		re, err := regexp.Compile(m.filter)
+		if err != nil {
+			m.errMsg = "Invalid regex"
+			return
+		}
+		var byRegex []Line
+		for _, line := range result {
+			if re.MatchString(line.Raw) {
+				byRegex = append(byRegex, line)
+			}
+		}
+		result = byRegex
+	}
+
+	m.errMsg = ""
+	m.filtered = result
 	m.page = m.totalPages() - 1
 	m.cursor = 0
 }
@@ -355,6 +416,11 @@ func (m *Model) View() string {
 		return ui.Card("Page Jump", content, ui.ColAccent, cardWidth)
 	}
 
+	// Level filter 选择界面
+	if m.levelOverlay {
+		return m.renderLevelFilter(cardWidth)
+	}
+
 	// 未加载
 	if !m.loaded {
 		emptyContent := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  Press '/' to enter log file path")
@@ -373,10 +439,19 @@ func (m *Model) View() string {
 
 	// 标题行：过滤信息 + 页码
 	filterInfo := ""
+	hasLevel := len(m.selectedLevels()) > 0
 	if m.filter != "" {
 		filterInfo = fmt.Sprintf(" Filter: %s (%d/%d)", m.filter, len(m.filtered), len(m.all))
+	} else if hasLevel {
+		filterInfo = fmt.Sprintf(" %d/%d entries", len(m.filtered), len(m.all))
 	} else {
 		filterInfo = fmt.Sprintf(" %d entries", len(m.filtered))
+	}
+	// level filter 徽标
+	levels := m.selectedLevels()
+	if len(levels) > 0 {
+		levelBadge := "Level: " + strings.Join(levels, "/")
+		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColGreen).Render(levelBadge)
 	}
 	pageInfo := fmt.Sprintf("Page %d/%d  [%d-%d/%d]", m.page+1, totalP, start+1, end, len(m.filtered))
 	if m.errMsg != "" {
@@ -453,6 +528,45 @@ func (m *Model) View() string {
 	lines = append(lines, "")
 	lines = append(lines, m.stats())
 	return ui.Box("Log", strings.Join(lines, "\n"), m.width)
+}
+
+func (m *Model) renderLevelFilter(cardWidth int) string {
+	keyStyle := lipgloss.NewStyle().Foreground(ui.ColAccent).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(ui.ColText)
+	mutedStyle := lipgloss.NewStyle().Foreground(ui.ColMuted)
+	selectedStyle := lipgloss.NewStyle().Foreground(ui.ColGreen)
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+	for i, opt := range levelOpts {
+		// 光标指示
+		cursor := "  "
+		if i == m.levelIdx {
+			cursor = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸ ")
+		}
+
+		// 选中状态
+		checkbox := "[ ]"
+		isSelected := i == 0 && len(m.levelSel) == 0 // All
+		if i > 0 {
+			isSelected = m.levelSel[i]
+		}
+		if isSelected {
+			checkbox = selectedStyle.Render("[✓]")
+		}
+
+		// 高亮当前光标行
+		label := descStyle.Render(opt)
+		if i == m.levelIdx {
+			label = keyStyle.Render(opt)
+		}
+
+		sb.WriteString(fmt.Sprintf("  %s %s %s\n", cursor, checkbox, label))
+	}
+	sb.WriteString("\n")
+	sb.WriteString(mutedStyle.Render("  ↑↓/kj navigate  Enter/Space toggle  Esc close"))
+	sb.WriteString("\n")
+	return ui.Card("Level Filter", sb.String(), ui.ColAccent, cardWidth)
 }
 
 func (m *Model) stats() string {
