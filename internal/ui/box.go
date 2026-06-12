@@ -107,7 +107,7 @@ func RenderInputCard(opts InputCardOpts) string {
 		sb.WriteString("\n\n")
 	}
 
-	sb.WriteString(lipgloss.NewStyle().Foreground(ColMuted).Render("  Enter confirm  ↑↓ recent  ←→ cursor  Home/End  Esc cancel"))
+	sb.WriteString(lipgloss.NewStyle().Foreground(ColMuted).Render("  Enter confirm  ↑↓ recent  ←→ cursor  Home/End  ctrl+u clear  Esc close"))
 	return Card(opts.Title, sb.String(), ColSecondary, opts.CardWidth)
 }
 

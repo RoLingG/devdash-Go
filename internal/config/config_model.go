@@ -163,7 +163,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "/":
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.configPath)
-		case "esc":
+		case "ctrl+u":
 			m.filter = ""
 			m.rebuildLines()
 		case "backspace":
@@ -172,6 +172,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.filter = string(runes[:len(runes)-1])
 				m.rebuildLines()
 			}
+		case "ctrl+e":
+			m.root = expandAll(m.root)
+			m.rebuildLines()
+		case "ctrl+w":
+			m.root = collapseAll(m.root)
+			m.rebuildLines()
 		case "ctrl+n":
 			m.jumpNextMatch()
 		case "ctrl+b":
@@ -245,7 +251,8 @@ func (m *Model) View() string {
 		headerLines += 2
 	}
 	if m.filter != "" {
-		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  Search: " + m.filter))
+		hint := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  ctrl+u clear")
+		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  Search: " + m.filter) + hint)
 		sb.WriteString("\n\n")
 		headerLines += 2
 	}
@@ -352,6 +359,31 @@ func (m *Model) toggleNode(idx int) {
 	}
 	counter := 0
 	m.root = ToggleHelper(m.root, idx, &counter, m.filter)
+}
+
+// expandAll 递归展开所有有子节点的节点
+func expandAll(node Node) Node {
+	if len(node.Children) > 0 {
+		node.Expanded = true
+		for i := range node.Children {
+			node.Children[i] = expandAll(node.Children[i])
+		}
+	}
+	return node
+}
+
+// collapseAll 递归收起所有有子节点的节点
+func collapseAll(node Node) Node {
+	if len(node.Children) > 0 {
+		// 根节点为不可见容器，其key=""，必须保持展开
+		if node.Key != "" {
+			node.Expanded = false
+		}
+		for i := range node.Children {
+			node.Children[i] = collapseAll(node.Children[i])
+		}
+	}
+	return node
 }
 
 // ---- 树渲染辅助函数 ----

@@ -97,9 +97,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		// 帮助面板显示时，只响应 ? 关闭，其他按键全部拦截
+		// 帮助面板显示时，只响应 ? 或 Esc 关闭，其他按键全部拦截
 		if m.helpOverlay {
-			if msg.String() == "?" {
+			if msg.String() == "?" || msg.String() == "esc" {
 				m.helpOverlay = false
 				return m, nil
 			}

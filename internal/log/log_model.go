@@ -340,7 +340,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			}
 		case "enter":
 			m.applyFilter()
-		case "esc":
+		case "ctrl+u":
 			m.filter = ""
 			m.applyFilter()
 		case "backspace":
@@ -468,7 +468,8 @@ func (m *Model) View() string {
 	filterInfo := ""
 	hasLevel := len(m.selectedLevels()) > 0
 	if m.filter != "" {
-		filterInfo = fmt.Sprintf(" Filter: %s (%d/%d)", m.filter, len(m.filtered), len(m.all))
+		hint := lipgloss.NewStyle().Foreground(ui.ColMuted).Render(" ctrl+u clear")
+		filterInfo = fmt.Sprintf(" Filter: %s (%d/%d)", m.filter, len(m.filtered), len(m.all)) + hint
 	} else if hasLevel {
 		filterInfo = fmt.Sprintf(" %d/%d entries", len(m.filtered), len(m.all))
 	} else {

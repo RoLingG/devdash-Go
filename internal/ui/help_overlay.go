@@ -25,27 +25,27 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 	items := map[TabState][]HelpItem{
 		TabGit: {
 			{"↑↓", "scroll commits"}, {"/", "change repo"}, {"ctrl+r", "refresh"},
-			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabLog: {
 			{"↑↓", "cursor in page"}, {"[ ]", "prev/next page"},
 			{"ctrl+↑↓", "fast ±10 pages"}, {"ctrl+p", "jump to page"},
 			{"/", "open path"}, {"type", "filter"}, {"ctrl+l", "level filter"},
-			{"ctrl+f", "follow mode"}, {"Esc", "clear filter"},
-			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"1/2/3/4", "switch tab"},
+			{"ctrl+u", "clear filter"}, {"ctrl+f", "follow mode"},
+			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabWeather: {
 			{"↑↓", "scroll content"}, {"/", "change city"}, {"ctrl+r", "refresh"},
-			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabConfig: {
 			{"↑↓", "move cursor"}, {"enter", "toggle node"}, {"/", "open file"},
 			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"ctrl+n/b", "next/prev match"},
-			{"Esc", "clear search"},
-			{"?", "toggle help"}, {"1/2/3/4", "switch tab"},
+			{"ctrl+u", "clear search"}, {"ctrl+e", "expand all"}, {"ctrl+w", "collapse all"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 	}
