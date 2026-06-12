@@ -379,7 +379,7 @@ func (m *Model) applyFilter() {
 
 	// 正则过滤
 	if m.filter != "" {
-		re, err := regexp.Compile(m.filter)
+		re, err := regexp.Compile("(?i)" + m.filter)
 		if err != nil {
 			m.errMsg = "Invalid regex"
 			return
@@ -514,7 +514,7 @@ func (m *Model) View() string {
 			foundCursor = true
 		}
 		for j, wl := range wrapped {
-			colored := colorizeLog(Line{Level: l.Level, Raw: wl})
+			colored := colorizeLog(Line{Level: l.Level, Raw: wl}, m.filter)
 			if isCursor {
 				if j == 0 {
 					wrappedLines = append(wrappedLines, cursorStyle.Render(">")+colored)
@@ -639,7 +639,7 @@ func wrapLine(s string, maxW int) []string {
 	return result
 }
 
-func colorizeLog(l Line) string {
+func colorizeLog(l Line, filter string) string {
 	var color lipgloss.Color
 	switch l.Level {
 	case "ERROR":
@@ -653,5 +653,18 @@ func colorizeLog(l Line) string {
 	default:
 		return "  " + l.Raw
 	}
-	return "  " + lipgloss.NewStyle().Foreground(color).Render(l.Raw)
+
+	raw := l.Raw
+	levelStyle := lipgloss.NewStyle().Foreground(color)
+	if filter != "" {
+		idx := strings.Index(strings.ToLower(raw), strings.ToLower(filter))
+		if idx >= 0 {
+			highlight := lipgloss.NewStyle().Background(ui.ColAccent).Foreground(ui.ColText)
+			before := levelStyle.Render(raw[:idx])
+			match := highlight.Render(raw[idx : idx+len(filter)])
+			after := levelStyle.Render(raw[idx+len(filter):])
+			return "  " + before + match + after
+		}
+	}
+	return "  " + levelStyle.Render(raw)
 }
