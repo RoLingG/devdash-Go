@@ -32,7 +32,7 @@ type model struct {
 	height      int            // 终端高度
 	appCfg      ui.AppConfig   // 应用持久化配置
 	cfgSaved    bool           // 配置是否已保存（用于显示提示）
-	helpShowing bool           // 帮助面板是否展开
+	helpOverlay bool           // 帮助面板是否展开
 	git         *git.Model     // Git 可视化子模块
 	log         *log.Model     // 日志查看器子模块
 	weather     *weather.Model // 天气面板子模块
@@ -98,9 +98,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		// 帮助面板显示时，只响应 ? 关闭，其他按键全部拦截
-		if m.helpShowing {
+		if m.helpOverlay {
 			if msg.String() == "?" {
-				m.helpShowing = false
+				m.helpOverlay = false
 				return m, nil
 			}
 			return m, nil
@@ -125,7 +125,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// 输入框活跃时，? 透传给模块
 				break
 			}
-			m.helpShowing = true
+			m.helpOverlay = true
 			return m, nil
 		// 数字键切换 Tab（全局快捷键），输入框活跃时透传给当前模块
 		case "1", "2", "3", "4":
@@ -212,7 +212,7 @@ func (m model) View() tea.View {
 	}
 
 	// 帮助面板覆盖在主内容上
-	if m.helpShowing {
+	if m.helpOverlay {
 		content = ui.RenderHelpOverlay(m.state, m.width, m.height-3)
 	}
 

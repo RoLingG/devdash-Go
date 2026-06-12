@@ -214,7 +214,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				if m.levelIdx < len(levelOpts)-1 {
 					m.levelIdx++
 				}
-			case "enter", " ":
+			case "enter", "space":
 				if m.levelIdx == 0 {
 					// All — 清除所有选中
 					m.levelSel = map[int]bool{}
