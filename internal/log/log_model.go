@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
@@ -41,6 +42,9 @@ type Model struct {
 	levelOverlay bool         // level filter 选择界面是否打开
 	levelIdx     int          // 当前光标位置（0=All, 1=INFO, 2=WARN, 3=ERROR, 4=DEBUG）
 	levelSel     map[int]bool // level filter 多选状态
+
+	followMode bool      // tail -f 跟随模式
+	lastMtime  time.Time // 上次文件修改时间
 }
 
 const logPageSize = 10
@@ -141,6 +145,20 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.dirList.SetItems(msg.Files)
 		m.input.Active = false
 		return m, nil
+
+	case tailTickMsg:
+		if !m.followMode || m.logPath == "" {
+			return m, nil
+		}
+		info, err := os.Stat(m.logPath)
+		if err != nil {
+			return m, nil
+		}
+		if info.ModTime().After(m.lastMtime) {
+			m.lastMtime = info.ModTime()
+			return m, tea.Batch(LoadFromFileCmd(m.logPath), tailTickCmd(2*time.Second))
+		}
+		return m, tailTickCmd(2*time.Second)
 
 	case tea.PasteMsg:
 		if m.input.Active {
@@ -307,6 +325,15 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "/":
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.logPath)
+		case "ctrl+f":
+			m.followMode = !m.followMode
+			if m.followMode && m.logPath != "" {
+				info, err := os.Stat(m.logPath)
+				if err == nil {
+					m.lastMtime = info.ModTime()
+				}
+				return m, tailTickCmd(2 * time.Second)
+			}
 		case "ctrl+r":
 			if m.logPath != "" {
 				return m, func() tea.Msg { return LoadFromFile(m.logPath) }
@@ -452,6 +479,10 @@ func (m *Model) View() string {
 	if len(levels) > 0 {
 		levelBadge := "Level: " + strings.Join(levels, "/")
 		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColGreen).Render(levelBadge)
+	}
+	// tail -f 徽标
+	if m.followMode {
+		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColGreen).Bold(true).Render("Following")
 	}
 	pageInfo := fmt.Sprintf("Page %d/%d  [%d-%d/%d]", m.page+1, totalP, start+1, end, len(m.filtered))
 	if m.errMsg != "" {

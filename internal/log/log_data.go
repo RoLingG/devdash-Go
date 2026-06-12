@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -26,6 +27,16 @@ type LoadMsg struct {
 type DirMsg struct {
 	Dir   string
 	Files []string
+}
+
+// tailTickMsg tail -f 定时检查消息
+type tailTickMsg struct{}
+
+// tailTickCmd 延迟 duration 后发送 tailTickMsg（链式调用实现周期监听）
+func tailTickCmd(duration time.Duration) tea.Cmd {
+	return tea.Tick(duration, func(time.Time) tea.Msg {
+		return tailTickMsg{}
+	})
 }
 
 // LoadFromStdin 从 stdin 读取日志（pipe 场景）

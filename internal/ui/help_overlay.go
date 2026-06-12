@@ -32,7 +32,7 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"↑↓", "cursor in page"}, {"[ ]", "prev/next page"},
 			{"ctrl+↑↓", "fast ±10 pages"}, {"ctrl+p", "jump to page"},
 			{"/", "open path"}, {"type", "filter"}, {"ctrl+l", "level filter"},
-			{"Esc", "clear filter"},
+			{"ctrl+f", "follow mode"}, {"Esc", "clear filter"},
 			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"1/2/3/4", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
