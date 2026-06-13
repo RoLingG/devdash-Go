@@ -247,17 +247,33 @@ func (m *Model) View() string {
 		nodes := countNodes(m.root)
 		info := fmt.Sprintf("📂 %s • %d nodes • %d/%d", m.configPath, nodes, m.cursor+1, len(m.lines))
 		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  " + info))
-		sb.WriteString("\n\n")
+		sb.WriteString("\n")
 		headerLines += 2
 	}
 	if m.filter != "" {
 		hint := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  ctrl+u clear")
-		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  Search: " + m.filter) + hint)
+		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  Search: "+m.filter) + hint)
 		sb.WriteString("\n\n")
-		headerLines += 2
+		headerLines++
 	}
+	// 显示当前节点完整路径
+	if len(m.lines) > 0 && m.cursor < len(m.lines) {
+		path := nodePath(m.root, m.cursor, m.filter)
+		if len(path) > 0 {
+			sep := lipgloss.NewStyle().Foreground(ui.ColMuted).Render(" / ")
+			styled := make([]string, len(path))
+			for i, k := range path {
+				styled[i] = lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(k)
+			}
+			sb.WriteString("  " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render("📍") + " " + strings.Join(styled, sep))
+			sb.WriteString("\n")
+			headerLines++
+		}
+	}
+	sb.WriteString("\n")
+	headerLines++
 
-	viewH := m.height - 2 - 4 - headerLines - 3
+	viewH := m.height - 2 - 3 - m.headerLines() - 3
 	if viewH < 3 {
 		viewH = 3
 	}
@@ -291,8 +307,27 @@ func (m *Model) rebuildLines() {
 	m.clampScroll()
 }
 
+// headerLines 计算 View 中 header 区域占用的行数
+func (m *Model) headerLines() int {
+	lines := 0
+	if m.loaded {
+		lines += 2 // info 行 + 空行
+	}
+	if m.filter != "" {
+		lines++ // filter 行
+	}
+	if len(m.lines) > 0 && m.cursor < len(m.lines) {
+		path := nodePath(m.root, m.cursor, m.filter)
+		if len(path) > 0 {
+			lines++ // 路径行
+		}
+	}
+	lines++ // 内容区前的空行
+	return lines
+}
+
 func (m *Model) clampScroll() {
-	viewH := m.height - 11
+	viewH := m.height - 2 - 3 - m.headerLines() - 3
 	if viewH < 3 {
 		viewH = 3
 	}
@@ -410,7 +445,11 @@ func Flatten(node Node, filter string) []string {
 				styledKey := lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(HighlightMatch(node.Key, filter))
 				lines = append(lines, indent+icon+" "+styledKey+": "+suffix)
 				if node.Expanded || (f != "" && matchesChild) {
-					lines = append(lines, childLines...)
+					for _, cl := range childLines {
+						if cl != "" {
+							lines = append(lines, cl)
+						}
+					}
 				}
 			}
 		} else {
@@ -445,6 +484,7 @@ func flattenChildren(node Node, filter string) []string {
 	if !node.Expanded {
 		return nil
 	}
+	// 展开时，子节点key和value都显示
 	childFilter := filter
 	if f != "" && strings.Contains(strings.ToLower(node.Key), f) {
 		childFilter = ""
@@ -457,6 +497,7 @@ func flattenChildren(node Node, filter string) []string {
 }
 
 func nodeMatches(node Node, f string) bool {
+	// 如果当前节点key或value包含filter，则匹配
 	if strings.Contains(strings.ToLower(node.Key), f) {
 		return true
 	}
@@ -465,12 +506,59 @@ func nodeMatches(node Node, f string) bool {
 			return true
 		}
 	}
+	// 递归检查子节点
 	for _, child := range node.Children {
 		if nodeMatches(child, f) {
 			return true
 		}
 	}
 	return false
+}
+
+// nodePath 返回第 cursor 个可见节点从根到该节点的 key 路径
+func nodePath(node Node, cursor int, filter string) []string {
+	f := strings.ToLower(filter)
+	idx := 0
+	var walk func(n Node) ([]string, bool)
+	walk = func(n Node) ([]string, bool) {
+		if n.Key != "" {
+			if idx == cursor {
+				return []string{n.Key}, true
+			}
+			idx++
+			if len(n.Children) > 0 {
+				childLines := flattenChildren(n, filter)
+				matchesSelf := f == "" || strings.Contains(strings.ToLower(n.Key), f)
+				matchesChild := len(childLines) > 0
+				if n.Expanded || (f != "" && matchesChild) {
+					for _, child := range n.Children {
+						// 搜索时过滤掉不匹配的子节点
+						if f != "" && !matchesSelf && !nodeMatches(child, f) {
+							continue
+						}
+						if path, found := walk(child); found {
+							return append([]string{n.Key}, path...), true
+						}
+					}
+				}
+			}
+		} else {
+			// 根节点（Key=""），不计数，直接递归子节点
+			if len(n.Children) > 0 {
+				for _, child := range n.Children {
+					if f != "" && !nodeMatches(child, f) {
+						continue
+					}
+					if path, found := walk(child); found {
+						return path, true
+					}
+				}
+			}
+		}
+		return nil, false
+	}
+	path, _ := walk(node)
+	return path
 }
 
 // ColorizeValue 根据值类型着色
