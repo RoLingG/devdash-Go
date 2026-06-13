@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,7 +35,7 @@ type DirMsg struct {
 	Files []string
 }
 
-// LoadFile 从文件加载配置（自动识别 JSON / YAML）
+// LoadFile 从文件加载配置
 func LoadFile(path string) tea.Msg {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -47,6 +48,10 @@ func LoadFile(path string) tea.Msg {
 		if err := yaml.Unmarshal(data, &raw); err != nil {
 			return LoadMsg{Err: fmt.Errorf("YAML parse error: %v", err)}
 		}
+	case ".toml":
+		if err := toml.Unmarshal(data, &raw); err != nil {
+			return LoadMsg{Err: fmt.Errorf("TOML parse error: %v", err)}
+		}
 	default:
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return LoadMsg{Err: fmt.Errorf("JSON parse error: %v", err)}
@@ -56,7 +61,7 @@ func LoadFile(path string) tea.Msg {
 	return LoadMsg{Root: root}
 }
 
-// ScanDir 扫描目录下所有 JSON / YAML 文件
+// ScanDir 扫描目录下所有 JSON / YAML / TOML 文件
 func ScanDir(dir string) tea.Msg {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -68,7 +73,7 @@ func ScanDir(dir string) tea.Msg {
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(e.Name()))
-		if ext == ".json" || ext == ".yaml" || ext == ".yml" {
+		if ext == ".json" || ext == ".yaml" || ext == ".yml" || ext == ".toml" {
 			files = append(files, e.Name())
 		}
 	}
