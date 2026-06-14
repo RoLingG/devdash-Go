@@ -31,6 +31,8 @@ type Info struct {
 	Commits      []Commit
 	Files        []FileChange
 	Contributors []Contributor
+	Ahead        int
+	Behind       int
 	Err          error
 }
 
@@ -44,6 +46,7 @@ func FetchInfoFromDir(dir string) Info {
 	info.Commits = commitsInDir(dir, 30)
 	info.Files = fileChangesInDir(dir, 100)
 	info.Contributors = contributorsInDir(dir, 100)
+	info.Ahead, info.Behind = aheadBehindInDir(dir)
 	return info
 }
 
@@ -133,4 +136,24 @@ func contributorsInDir(dir string, n int) []Contributor {
 		contribs = append(contribs, Contributor{strings.TrimSpace(parts[1]), count})
 	}
 	return contribs
+}
+
+func aheadBehindInDir(dir string) (int, int) {
+	// git rev-list --left-right --count HEAD...@{upstream}
+	// 输出格式: "3\t2" (ahead \t behind)
+	out, err := exec.Command("git", "-C", dir, "rev-list", "--left-right", "--count", "HEAD...@{upstream}").Output()
+	if err != nil {
+		// 没有配置 upstream 或其他错误，返回 0, 0
+		return 0, 0
+	}
+	parts := strings.Split(strings.TrimSpace(string(out)), "\t")
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	ahead, err1 := strconv.Atoi(parts[0])
+	behind, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return 0, 0
+	}
+	return ahead, behind
 }

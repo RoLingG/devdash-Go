@@ -158,7 +158,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 					}
 					if info.IsDir() {
 						gitPath := filepath.Join(path, ".git")
-						if gi, gerr := os.Stat(gitPath); gerr == nil && gi.IsDir() {
+						if gi, gErr := os.Stat(gitPath); gErr == nil && gi.IsDir() {
 							m.repoPath = path
 							m.loading = true
 							return LoadInfoFromDirCmd(path)
@@ -286,6 +286,20 @@ func (m *Model) viewCommits() string {
 	pathLine := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  📂 " + repoPath)
 	branch := lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.info.Current)
 	header := fmt.Sprintf("  Branch: %s (%d total)", branch, len(m.info.Branches))
+
+	// ahead/behind 状态
+	if m.info.Ahead > 0 || m.info.Behind > 0 {
+		aheadStyle := lipgloss.NewStyle().Foreground(ui.ColGreen)
+		behindStyle := lipgloss.NewStyle().Foreground(ui.ColAccent)
+		var badges []string
+		if m.info.Ahead > 0 {
+			badges = append(badges, aheadStyle.Render(fmt.Sprintf("↑%d", m.info.Ahead)))
+		}
+		if m.info.Behind > 0 {
+			badges = append(badges, behindStyle.Render(fmt.Sprintf("↓%d", m.info.Behind)))
+		}
+		header += "  " + strings.Join(badges, " ")
+	}
 
 	var lines []string
 	lines = append(lines, pathLine, header, "")
