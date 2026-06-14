@@ -33,8 +33,8 @@ type Info struct {
 	Contributors []Contributor
 	Ahead        int
 	Behind       int
-	Modified     int // 工作区修改的文件数
-	Untracked    int // 未追踪的文件数
+	Modified     int
+	Untracked    int
 	Err          error
 }
 
@@ -142,10 +142,9 @@ func contributorsInDir(dir string, n int) []Contributor {
 }
 
 func aheadBehindInDir(dir string) (int, int) {
-	// 输出格式: "3\t2" (ahead \t behind)
+	// git rev-list --left-right --count HEAD...@{upstream}
 	out, err := exec.Command("git", "-C", dir, "rev-list", "--left-right", "--count", "HEAD...@{upstream}").Output()
 	if err != nil {
-		// 未配置 upstream 或其他错误
 		return 0, 0
 	}
 	parts := strings.Split(strings.TrimSpace(string(out)), "\t")
@@ -162,7 +161,6 @@ func aheadBehindInDir(dir string) (int, int) {
 
 func workingDirStatusInDir(dir string) (int, int) {
 	// git status --short
-	// 输出格式每行：XY filename
 	// X = 暂存区状态，Y = 工作区状态
 	// M = modified, A = added, D = deleted, ?? = untracked
 	out, err := exec.Command("git", "-C", dir, "status", "--short").Output()
@@ -176,7 +174,6 @@ func workingDirStatusInDir(dir string) (int, int) {
 			continue
 		}
 		status := line[:2]
-		// ?? = untracked
 		if status == "??" {
 			untracked++
 			continue
