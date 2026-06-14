@@ -290,7 +290,7 @@ func (m *Model) viewCommits() string {
 	// ahead/behind 状态
 	if m.info.Ahead > 0 || m.info.Behind > 0 {
 		aheadStyle := lipgloss.NewStyle().Foreground(ui.ColGreen)
-		behindStyle := lipgloss.NewStyle().Foreground(ui.ColAccent)
+		behindStyle := lipgloss.NewStyle().Foreground(ui.ColRed)
 		var badges []string
 		if m.info.Ahead > 0 {
 			badges = append(badges, aheadStyle.Render(fmt.Sprintf("↑%d", m.info.Ahead)))
@@ -302,16 +302,25 @@ func (m *Model) viewCommits() string {
 	}
 
 	// 工作区 dirty 状态
-	if m.info.Modified > 0 || m.info.Untracked > 0 {
-		dirtyStyle := lipgloss.NewStyle().Foreground(ui.ColAccent)
+	if m.info.Modified > 0 || m.info.Added > 0 || m.info.Deleted > 0 || m.info.Untracked > 0 {
 		var parts []string
 		if m.info.Modified > 0 {
-			parts = append(parts, fmt.Sprintf("%d modified", m.info.Modified))
+			style := lipgloss.NewStyle().Foreground(ui.ColAccent)
+			parts = append(parts, style.Render(fmt.Sprintf("%dM", m.info.Modified)))
+		}
+		if m.info.Added > 0 {
+			style := lipgloss.NewStyle().Foreground(ui.ColGreen)
+			parts = append(parts, style.Render(fmt.Sprintf("%dA", m.info.Added)))
+		}
+		if m.info.Deleted > 0 {
+			style := lipgloss.NewStyle().Foreground(ui.ColRed)
+			parts = append(parts, style.Render(fmt.Sprintf("%dD", m.info.Deleted)))
 		}
 		if m.info.Untracked > 0 {
-			parts = append(parts, fmt.Sprintf("%d untracked", m.info.Untracked))
+			style := lipgloss.NewStyle().Foreground(ui.ColMuted)
+			parts = append(parts, style.Render(fmt.Sprintf("%d??", m.info.Untracked)))
 		}
-		header += "  " + dirtyStyle.Render("📝 "+strings.Join(parts, ", "))
+		header += "  📝 " + strings.Join(parts, " ")
 	}
 
 	var lines []string

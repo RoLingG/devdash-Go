@@ -34,6 +34,8 @@ type Info struct {
 	Ahead        int
 	Behind       int
 	Modified     int
+	Added        int
+	Deleted      int
 	Untracked    int
 	Err          error
 }
@@ -49,7 +51,7 @@ func FetchInfoFromDir(dir string) Info {
 	info.Files = fileChangesInDir(dir, 100)
 	info.Contributors = contributorsInDir(dir, 100)
 	info.Ahead, info.Behind = aheadBehindInDir(dir)
-	info.Modified, info.Untracked = workingDirStatusInDir(dir)
+	info.Modified, info.Added, info.Deleted, info.Untracked = workingDirStatusInDir(dir)
 	return info
 }
 
@@ -159,15 +161,17 @@ func aheadBehindInDir(dir string) (int, int) {
 	return ahead, behind
 }
 
-func workingDirStatusInDir(dir string) (int, int) {
+func workingDirStatusInDir(dir string) (int, int, int, int) {
 	// git status --short
 	// X = 暂存区状态，Y = 工作区状态
 	// M = modified, A = added, D = deleted, ?? = untracked
 	out, err := exec.Command("git", "-C", dir, "status", "--short").Output()
 	if err != nil {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
 	modified := 0
+	added := 0
+	deleted := 0
 	untracked := 0
 	for _, line := range strings.Split(string(out), "\n") {
 		if len(line) < 3 {
@@ -178,10 +182,14 @@ func workingDirStatusInDir(dir string) (int, int) {
 			untracked++
 			continue
 		}
-		// 任何 M/A/D/R/C 都算 modified（包括暂存区和工作区）
-		if strings.ContainsAny(status, "MADRC") {
+		// 统计 M/A/D（检查暂存区X和工作区Y两个位置）
+		if strings.ContainsAny(status, "M") {
 			modified++
+		} else if strings.ContainsAny(status, "A") {
+			added++
+		} else if strings.ContainsAny(status, "D") {
+			deleted++
 		}
 	}
-	return modified, untracked
+	return modified, added, deleted, untracked
 }
