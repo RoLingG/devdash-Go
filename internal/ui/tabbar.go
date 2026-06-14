@@ -26,7 +26,7 @@ func RenderTabBar(active TabState, width int) string {
 }
 
 // helpLine 一行快捷键提示，每项固定列宽对齐后用分隔符连接
-const helpColW = 16 // 每列固定宽度，确保上下两行的 • 纵向对齐
+const helpColW = 13
 
 func helpLine(parts []string, width int, sep string) string {
 	for i, p := range parts {
@@ -49,23 +49,23 @@ func RenderStatusBar(active TabState, width int) string {
 
 	switch active {
 	case TabGit:
-		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ repo", "ctrl+r refresh", "? help"}, width, sep)
-		line2 := helpLine([]string{"1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 Scroll", "/ Open", "? Help"}, width, sep)
+		line2 := helpLine([]string{"^S Save", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabLog:
-		line1 := helpLine([]string{"\u2191\u2193 cursor", "[ ] page", "ctrl+p jump", "ctrl+l level", "ctrl+f follow"}, width, sep)
-		line2 := helpLine([]string{"type filter", "/ open", "ctrl+u clear", "Esc close", "ctrl+q quit"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 Scroll", "[ ] Page", "/ Open", "^P Jump", "^L Level", "^F Follow"}, width, sep)
+		line2 := helpLine([]string{"Type Filter", "^U Clear", "Esc Close", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabWeather:
-		line1 := helpLine([]string{"\u2191\u2193 scroll", "/ city", "ctrl+r refresh", "? help"}, width, sep)
-		line2 := helpLine([]string{"1/2/3/4 switch", "ctrl+s save", "ctrl+q quit"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 Scroll", "/ Open", "? Help"}, width, sep)
+		line2 := helpLine([]string{"^S Save", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabConfig:
-		line1 := helpLine([]string{"\u2191\u2193 move", "enter toggle", "/ open", "ctrl+n/b match", "ctrl+e/w expand/collapse"}, width, sep)
-		line2 := helpLine([]string{"ctrl+u clear", "Esc close", "? help", "1/2/3/4 switch", "ctrl+q quit"}, width, sep)
+		line1 := helpLine([]string{"\u2191\u2193 Scroll", "Enter Toggle", "/ Open", "^N/B Match", "^E/W All"}, width, sep)
+		line2 := helpLine([]string{"Type Filter", "^U Clear", "Esc Close", "? Help", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""
