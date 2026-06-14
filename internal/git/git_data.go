@@ -33,6 +33,8 @@ type Info struct {
 	Contributors []Contributor
 	Ahead        int
 	Behind       int
+	Modified     int // 工作区修改的文件数
+	Untracked    int // 未追踪的文件数
 	Err          error
 }
 
@@ -47,6 +49,7 @@ func FetchInfoFromDir(dir string) Info {
 	info.Files = fileChangesInDir(dir, 100)
 	info.Contributors = contributorsInDir(dir, 100)
 	info.Ahead, info.Behind = aheadBehindInDir(dir)
+	info.Modified, info.Untracked = workingDirStatusInDir(dir)
 	return info
 }
 
@@ -139,11 +142,10 @@ func contributorsInDir(dir string, n int) []Contributor {
 }
 
 func aheadBehindInDir(dir string) (int, int) {
-	// git rev-list --left-right --count HEAD...@{upstream}
 	// 输出格式: "3\t2" (ahead \t behind)
 	out, err := exec.Command("git", "-C", dir, "rev-list", "--left-right", "--count", "HEAD...@{upstream}").Output()
 	if err != nil {
-		// 没有配置 upstream 或其他错误，返回 0, 0
+		// 未配置 upstream 或其他错误
 		return 0, 0
 	}
 	parts := strings.Split(strings.TrimSpace(string(out)), "\t")
@@ -156,4 +158,33 @@ func aheadBehindInDir(dir string) (int, int) {
 		return 0, 0
 	}
 	return ahead, behind
+}
+
+func workingDirStatusInDir(dir string) (int, int) {
+	// git status --short
+	// 输出格式每行：XY filename
+	// X = 暂存区状态，Y = 工作区状态
+	// M = modified, A = added, D = deleted, ?? = untracked
+	out, err := exec.Command("git", "-C", dir, "status", "--short").Output()
+	if err != nil {
+		return 0, 0
+	}
+	modified := 0
+	untracked := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		if len(line) < 3 {
+			continue
+		}
+		status := line[:2]
+		// ?? = untracked
+		if status == "??" {
+			untracked++
+			continue
+		}
+		// 任何 M/A/D/R/C 都算 modified（包括暂存区和工作区）
+		if strings.ContainsAny(status, "MADRC") {
+			modified++
+		}
+	}
+	return modified, untracked
 }

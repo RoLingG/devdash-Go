@@ -301,6 +301,19 @@ func (m *Model) viewCommits() string {
 		header += "  " + strings.Join(badges, " ")
 	}
 
+	// 工作区 dirty 状态
+	if m.info.Modified > 0 || m.info.Untracked > 0 {
+		dirtyStyle := lipgloss.NewStyle().Foreground(ui.ColAccent)
+		var parts []string
+		if m.info.Modified > 0 {
+			parts = append(parts, fmt.Sprintf("%d modified", m.info.Modified))
+		}
+		if m.info.Untracked > 0 {
+			parts = append(parts, fmt.Sprintf("%d untracked", m.info.Untracked))
+		}
+		header += "  " + dirtyStyle.Render("📝 "+strings.Join(parts, ", "))
+	}
+
 	var lines []string
 	lines = append(lines, pathLine, header, "")
 
