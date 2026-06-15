@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
@@ -71,6 +72,29 @@ type Model struct {
 	dirListing bool
 	dirPath    string
 	dirList    component.ListModel
+
+	cachedInfo  Info
+	cachedMtime time.Time
+	cachedPath  string
+}
+
+func (m *Model) reloadFromCache() bool {
+	if m.cachedPath == "" {
+		return false
+	}
+	indexPath := filepath.Join(m.repoPath, ".git", "index")
+	info, err := os.Stat(indexPath)
+	if err != nil {
+		return false
+	}
+	// 文件未变化
+	if m.repoPath == m.cachedPath && info.ModTime() == m.cachedMtime {
+		m.info = m.cachedInfo
+		m.loaded = true
+		m.loading = false
+		return true
+	}
+	return false
 }
 
 // SetRecent 设置最近记录列表（转发给 InputModel）
@@ -96,6 +120,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.info = Info(msg)
 		m.loaded = true
 		m.loading = false
+		m.cachedInfo = m.info
+		m.cachedPath = m.repoPath
+		indexPath := filepath.Join(m.repoPath, ".git", "index")
+		if info, err := os.Stat(indexPath); err == nil {
+			m.cachedMtime = info.ModTime()
+		}
 		m.scroll = 0
 		m.input.Active = false
 		m.dirListing = false
@@ -184,9 +214,14 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.input.Prompt = "Repository path:"
 			m.input.Open(m.repoPath)
 		case "ctrl+r":
-			m.loading = true
-			m.err = nil
-			return m, func() tea.Msg { return LoadInfoFromDir(m.repoPath) }
+			if m.repoPath != "" {
+				if m.reloadFromCache() {
+					return m, nil
+				}
+				m.loading = true
+				m.err = nil
+				return m, func() tea.Msg { return LoadInfoFromDir(m.repoPath) } // 缓存未命中
+			}
 		}
 	}
 	return m, nil
@@ -342,6 +377,11 @@ func (m *Model) viewCommits() string {
 		lipgloss.NewStyle().Foreground(ui.ColMuted).Render("Message"),
 	))
 	lines = append(lines, "  "+strings.Repeat("─", m.width-10))
+
+	if len(m.info.Commits) == 0 {
+		emptyMsg := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  📭 仓库暂无提交记录")
+		lines = append(lines, emptyMsg)
+	}
 
 	for _, c := range m.info.Commits {
 		hash := lipgloss.NewStyle().Foreground(ui.ColAccent).Render(ui.PadRight(c.Hash, hw))

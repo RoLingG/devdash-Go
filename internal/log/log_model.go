@@ -45,6 +45,28 @@ type Model struct {
 
 	tailFMode bool
 	lastMtime time.Time
+
+	cachedLines []Line
+	cachedMtime time.Time
+	cachedPath  string
+}
+
+func (m *Model) reloadFromCache() bool {
+	if m.cachedPath == "" {
+		return false
+	}
+	info, err := os.Stat(m.logPath)
+	if err != nil {
+		return false
+	}
+	// 文件未变化
+	if m.logPath == m.cachedPath && info.ModTime() == m.cachedMtime {
+		m.all = m.cachedLines
+		m.loaded = true
+		m.applyFilter()
+		return true
+	}
+	return false
 }
 
 const logPageSize = 10
@@ -127,6 +149,11 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		m.all = lines
 		m.loaded = true
+		m.cachedLines = lines
+		m.cachedPath = m.logPath
+		if info, err := os.Stat(m.logPath); err == nil {
+			m.cachedMtime = info.ModTime()
+		}
 		m.input.Active = false
 		m.dirListing = false
 		m.errMsg = ""
@@ -337,6 +364,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			}
 		case "ctrl+r":
 			if m.logPath != "" {
+				if m.reloadFromCache() {
+					return m, nil
+				}
 				return m, func() tea.Msg { return LoadFromFile(m.logPath) }
 			}
 		case "enter":
@@ -501,6 +531,13 @@ func (m *Model) View() string {
 		lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  "+pageInfo)
 	lines = append(lines, headerLine)
 	lines = append(lines, "")
+
+	// 空状态提示
+	if len(m.filtered) == 0 {
+		emptyMsg := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  🔍 没有找到匹配的日志行，尝试修改过滤条件")
+		lines = append(lines, emptyMsg)
+		return ui.Card("Log Viewer", lipgloss.JoinVertical(lipgloss.Left, lines...), ui.ColAccent, cardWidth)
+	}
 
 	maxRawW := m.width - 12
 	if maxRawW < 10 {

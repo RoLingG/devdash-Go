@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
@@ -30,6 +31,28 @@ type Model struct {
 	dirListing bool
 	dirPath    string
 	dirList    component.ListModel
+
+	cachedRoot  Node
+	cachedMtime time.Time
+	cachedPath  string
+}
+
+func (m *Model) reloadFromCache() bool {
+	if m.cachedPath == "" {
+		return false
+	}
+	info, err := os.Stat(m.configPath)
+	if err != nil {
+		return false
+	}
+	// 文件未变化
+	if m.configPath == m.cachedPath && info.ModTime() == m.cachedMtime {
+		m.root = m.cachedRoot
+		m.loaded = true
+		m.rebuildLines()
+		return true
+	}
+	return false
 }
 
 // SetRecent 设置最近记录列表（转发给 InputModel）
@@ -70,6 +93,11 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		m.root = msg.Root
 		m.loaded = true
+		m.cachedRoot = msg.Root
+		m.cachedPath = m.configPath
+		if info, err := os.Stat(m.configPath); err == nil {
+			m.cachedMtime = info.ModTime()
+		}
 		m.input.Active = false
 		m.dirListing = false
 		m.errMsg = ""
@@ -159,6 +187,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.rebuildLines()
 		case "ctrl+r":
 			if m.configPath != "" {
+				if m.reloadFromCache() {
+					return m, nil
+				}
 				return m, LoadFileCmd(m.configPath)
 			}
 		case "/":
@@ -269,6 +300,13 @@ func (m *Model) View() string {
 	}
 	sb.WriteString("\n")
 	headerLines++
+
+	// 空状态提示
+	if len(m.lines) == 0 {
+		emptyMsg := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  📄 配置文件为空")
+		sb.WriteString(emptyMsg)
+		return ui.Card("Config Browser", sb.String(), ui.ColSecondary, cardWidth)
+	}
 
 	viewH := m.height - 2 - 3 - m.headerLines() - 3
 	if viewH < 3 {
