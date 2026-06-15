@@ -25,9 +25,9 @@ func RenderTabBar(active TabState, width int) string {
 	return bar
 }
 
-// helpLine 一行快捷键提示，每项固定列宽对齐后用分隔符连接
 const helpColW = 13
 
+// helpLine 一行快捷键提示，每项固定列宽对齐后用分隔符连接
 func helpLine(parts []string, width int, sep string) string {
 	for i, p := range parts {
 		parts[i] = PadRight(p, helpColW)
@@ -41,9 +41,7 @@ func helpLine(parts []string, width int, sep string) string {
 	return styled
 }
 
-// RenderStatusBar 渲染底部双行状态栏（nano 风格）
-// line1: 模块专属操作
-// line2: 全局操作
+// RenderStatusBar 渲染底部双行状态栏
 func RenderStatusBar(active TabState, width int) string {
 	sep := "  \u2022  " // • 分隔符
 

@@ -39,12 +39,12 @@ type Model struct {
 	dirPath    string
 	dirList    component.ListModel
 
-	levelOverlay bool         // level filter 选择界面是否打开
-	levelIdx     int          // 当前光标位置（0=All, 1=INFO, 2=WARN, 3=ERROR, 4=DEBUG）
-	levelSel     map[int]bool // level filter 多选状态
+	levelOverlay bool
+	levelIdx     int
+	levelSel     map[int]bool
 
-	followMode bool      // tail -f 跟随模式
-	lastMtime  time.Time // 上次文件修改时间
+	tailFMode bool
+	lastMtime time.Time
 }
 
 const logPageSize = 10
@@ -147,7 +147,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		return m, nil
 
 	case tailTickMsg:
-		if !m.followMode || m.logPath == "" {
+		if !m.tailFMode || m.logPath == "" {
 			return m, nil
 		}
 		info, err := os.Stat(m.logPath)
@@ -158,7 +158,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.lastMtime = info.ModTime()
 			return m, tea.Batch(LoadFromFileCmd(m.logPath), tailTickCmd(2*time.Second))
 		}
-		return m, tailTickCmd(2*time.Second)
+		return m, tailTickCmd(2 * time.Second)
 
 	case tea.PasteMsg:
 		if m.input.Active {
@@ -326,8 +326,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.logPath)
 		case "ctrl+f":
-			m.followMode = !m.followMode
-			if m.followMode && m.logPath != "" {
+			m.tailFMode = !m.tailFMode
+			if m.tailFMode && m.logPath != "" {
 				info, err := os.Stat(m.logPath)
 				if err == nil {
 					m.lastMtime = info.ModTime()
@@ -482,7 +482,7 @@ func (m *Model) View() string {
 		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColGreen).Render(levelBadge)
 	}
 	// tail -f 徽标
-	if m.followMode {
+	if m.tailFMode {
 		filterInfo += " | " + lipgloss.NewStyle().Foreground(ui.ColGreen).Bold(true).Render("Following")
 	}
 	pageInfo := fmt.Sprintf("Page %d/%d  [%d-%d/%d]", m.page+1, totalP, start+1, end, len(m.filtered))

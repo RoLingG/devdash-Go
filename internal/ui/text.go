@@ -6,20 +6,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// TrueWidth 修正 lipgloss.Width 对带变体选择器 emoji（如 ⚙️）的宽度偏差
-// lipgloss.Width("⚙️") 返回 1，但终端渲染占 2 列，此函数修正该偏差
-func TrueWidth(s string) int {
-	w := lipgloss.Width(s)
-	runes := []rune(s)
-	for i, r := range runes {
-		if r == '\uFE0F' && i > 0 {
-			// 变体选择器 16 让前一个字符以 emoji 样式渲染（+1 列）
-			w++
-		}
-	}
-	return w
-}
-
 // ForceTruncate 按 rune 遍历强制截断到指定列宽
 func ForceTruncate(s string, max int) string {
 	w := 0

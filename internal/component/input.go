@@ -55,7 +55,7 @@ func (m *InputModel) Reset() {
 	m.recentIdx = -1
 }
 
-// RecentIdx 返回当前选中的最近记录索引（供渲染使用）
+// RecentIdx 返回当前选中的最近记录索引
 func (m *InputModel) RecentIdx() int {
 	if len(m.RecentItems) == 0 {
 		return -1

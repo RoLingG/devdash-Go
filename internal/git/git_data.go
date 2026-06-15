@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Commit 单次提交
@@ -42,20 +43,56 @@ type Info struct {
 
 // FetchInfoFromDir 执行 git 命令获取指定目录的仓库信息
 func FetchInfoFromDir(dir string) Info {
+	// git rev-parse --is-inside-work-tree: 检查是否在 git 工作树内
 	if _, err := exec.Command("git", "-C", dir, "rev-parse", "--is-inside-work-tree").Output(); err != nil {
 		return Info{Err: err}
 	}
-	info := Info{}
-	info.Branches, info.Current = branchesInDir(dir)
-	info.Commits = commitsInDir(dir, 30)
-	info.Files = fileChangesInDir(dir, 100)
-	info.Contributors = contributorsInDir(dir, 100)
-	info.Ahead, info.Behind = aheadBehindInDir(dir)
-	info.Modified, info.Added, info.Deleted, info.Untracked = workingDirStatusInDir(dir)
-	return info
+	return fetchConcurrent(dir)
+}
+
+func fetchConcurrent(dir string) Info {
+	info := &Info{}
+	var wg sync.WaitGroup
+
+	wg.Add(6)
+	go func() {
+		defer wg.Done()
+		branches, current := branchesInDir(dir)
+		info.Branches = branches
+		info.Current = current
+	}()
+	go func() {
+		defer wg.Done()
+		info.Commits = commitsInDir(dir, 30)
+	}()
+	go func() {
+		defer wg.Done()
+		info.Files = fileChangesInDir(dir, 100)
+	}()
+	go func() {
+		defer wg.Done()
+		info.Contributors = contributorsInDir(dir, 100)
+	}()
+	go func() {
+		defer wg.Done()
+		ahead, behind := aheadBehindInDir(dir)
+		info.Ahead = ahead
+		info.Behind = behind
+	}()
+	go func() {
+		defer wg.Done()
+		modified, added, deleted, untracked := workingDirStatusInDir(dir)
+		info.Modified = modified
+		info.Added = added
+		info.Deleted = deleted
+		info.Untracked = untracked
+	}()
+	wg.Wait()
+	return *info
 }
 
 func branchesInDir(dir string) ([]string, string) {
+	// git branch --format=%(refname:short): 获取所有分支名（短格式）
 	out, err := exec.Command("git", "-C", dir, "branch", "--format=%(refname:short)").Output()
 	if err != nil {
 		return nil, ""
@@ -66,11 +103,14 @@ func branchesInDir(dir string) ([]string, string) {
 			branches = append(branches, s)
 		}
 	}
+	// git branch --show-current: 获取当前分支名
 	cur, _ := exec.Command("git", "-C", dir, "branch", "--show-current").Output()
 	return branches, strings.TrimSpace(string(cur))
 }
 
 func commitsInDir(dir string, n int) []Commit {
+	// git log --oneline -n N --format=%h|%an|%ad|%s --date=short
+	// 获取最近 N 次提交：哈希|作者|日期|消息
 	out, err := exec.Command("git", "-C", dir, "log",
 		"--oneline", "-n", strconv.Itoa(n),
 		"--format=%h|%an|%ad|%s", "--date=short",
@@ -95,6 +135,8 @@ func commitsInDir(dir string, n int) []Commit {
 }
 
 func fileChangesInDir(dir string, n int) []FileChange {
+	// git log --name-only --pretty=format: -n N
+	// 获取最近 N 次提交中修改的文件名，统计变更次数
 	out, err := exec.Command("git", "-C", dir, "log", "--name-only", "--pretty=format:", "-n", strconv.Itoa(n)).Output()
 	if err != nil {
 		return nil
@@ -117,11 +159,13 @@ func fileChangesInDir(dir string, n int) []FileChange {
 }
 
 func contributorsInDir(dir string, n int) []Contributor {
+	// git shortlog -sn --all -n N
+	// 统计所有分支的贡献者及其提交次数，按次数降序排列
 	out, err := exec.Command("git", "-C", dir, "shortlog", "-sn", "--all", "-n", strconv.Itoa(n)).Output()
 	if err != nil {
 		return nil
 	}
-	var contribs []Contributor
+	var contributors []Contributor
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -138,13 +182,14 @@ func contributorsInDir(dir string, n int) []Contributor {
 		if err != nil {
 			continue
 		}
-		contribs = append(contribs, Contributor{strings.TrimSpace(parts[1]), count})
+		contributors = append(contributors, Contributor{strings.TrimSpace(parts[1]), count})
 	}
-	return contribs
+	return contributors
 }
 
 func aheadBehindInDir(dir string) (int, int) {
 	// git rev-list --left-right --count HEAD...@{upstream}
+	// 获取本地分支与上游分支的领先和落后次数
 	out, err := exec.Command("git", "-C", dir, "rev-list", "--left-right", "--count", "HEAD...@{upstream}").Output()
 	if err != nil {
 		return 0, 0
@@ -162,7 +207,7 @@ func aheadBehindInDir(dir string) (int, int) {
 }
 
 func workingDirStatusInDir(dir string) (int, int, int, int) {
-	// git status --short
+	// git status --short: 获取暂存区和工作区的文件状态
 	// X = 暂存区状态，Y = 工作区状态
 	// M = modified, A = added, D = deleted, ?? = untracked
 	out, err := exec.Command("git", "-C", dir, "status", "--short").Output()
