@@ -23,7 +23,7 @@ type Model struct {
 	lines      []string
 	filter     string
 	loaded     bool
-	err        error
+	errMsg     string
 	configPath string
 
 	input      component.InputModel
@@ -62,7 +62,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case LoadMsg:
 		if msg.Err != nil {
-			m.err = msg.Err
+			m.errMsg = msg.Err.Error()
+			m.loaded = true
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.configPath)
 			return m, nil
@@ -71,12 +72,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.loaded = true
 		m.input.Active = false
 		m.dirListing = false
-		m.err = nil
+		m.errMsg = ""
 		m.rebuildLines()
 
 	case DirMsg:
 		if msg.Files == nil || len(msg.Files) == 0 {
-			m.err = fmt.Errorf("no config files found in: %s", msg.Dir)
+			m.errMsg = fmt.Sprintf("no config files found in: %s", msg.Dir)
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.dirPath)
 			m.dirListing = false
@@ -110,7 +111,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				fullPath := filepath.Join(m.dirPath, selected)
 				m.configPath = fullPath
 				m.dirListing = false
-				m.err = nil
+				m.errMsg = ""
 				return m, tea.Batch(LoadFileCmd(fullPath), ui.UpdateCfgCmd("configPath", fullPath))
 			case "esc":
 				m.dirListing = false
@@ -124,10 +125,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			return m, tea.Batch(
 				m.input.Update(msg, func(path string) func() tea.Msg {
 					if path != "" {
-						m.err = nil
+						m.errMsg = ""
 						info, err := os.Stat(path)
 						if err != nil {
-							m.err = fmt.Errorf("path not found: %s", path)
+							m.errMsg = fmt.Sprintf("path not found: %s", path)
 							return nil
 						}
 						if info.IsDir() {
@@ -211,16 +212,12 @@ func (m *Model) View() string {
 
 	// 路径输入模式
 	if m.input.Active {
-		errMsg := ""
-		if m.err != nil {
-			errMsg = m.err.Error()
-		}
 		return ui.RenderInputCard(ui.InputCardOpts{
 			Title:       "Open Config",
 			Prompt:      m.input.Prompt,
 			Value:       m.input.Value,
 			Cursor:      m.input.Cursor,
-			ErrMsg:      errMsg,
+			ErrMsg:      m.errMsg,
 			CardWidth:   cardWidth,
 			RecentItems: m.input.RecentItems,
 			RecentIdx:   m.input.RecentIdx(),
@@ -234,8 +231,8 @@ func (m *Model) View() string {
 	}
 
 	// 错误
-	if m.err != nil {
-		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("  ✗ "+m.err.Error()) + "\n"
+	if m.errMsg != "" {
+		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("  ✗ "+m.errMsg) + "\n"
 		errContent += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  Press '/' to open another file")
 		return ui.Card("Config Browser", errContent, ui.ColRed, cardWidth)
 	}

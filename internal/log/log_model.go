@@ -116,6 +116,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	case LoadMsg:
 		if msg.Err != nil {
 			m.errMsg = msg.Err.Error()
+			m.loaded = true
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.logPath)
 			return m, nil
@@ -452,6 +453,13 @@ func (m *Model) View() string {
 	if !m.loaded {
 		emptyContent := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  Press '/' to enter log file path")
 		return ui.Card("Log Viewer", emptyContent, ui.ColMuted, cardWidth)
+	}
+
+	// 加载失败
+	if m.errMsg != "" {
+		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("  ✗ "+m.errMsg) + "\n"
+		errContent += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  Press '/' to enter another path")
+		return ui.Card("Log Viewer", errContent, ui.ColRed, cardWidth)
 	}
 
 	var lines []string
