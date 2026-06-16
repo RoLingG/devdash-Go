@@ -190,12 +190,18 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 						gitPath := filepath.Join(path, ".git")
 						if gi, gErr := os.Stat(gitPath); gErr == nil && gi.IsDir() {
 							m.repoPath = path
+							if m.reloadFromCache() {
+								return nil
+							}
 							m.loading = true
 							return LoadInfoFromDirCmd(path)
 						}
 						return ScanDirCmd(path)
 					}
 					m.repoPath = filepath.Dir(path)
+					if m.reloadFromCache() {
+						return nil
+					}
 					m.loading = true
 					return LoadInfoFromDirCmd(filepath.Dir(path))
 				}),

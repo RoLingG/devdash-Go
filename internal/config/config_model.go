@@ -163,6 +163,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 							return ScanDirCmd(path)
 						}
 						m.configPath = path
+						if m.reloadFromCache() {
+							return nil
+						}
 						return LoadFileCmd(path)
 					}
 					return nil

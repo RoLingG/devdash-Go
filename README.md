@@ -5,11 +5,11 @@
 ## 功能模块
 
 | 快捷键 | 模块 | 功能 |
-|--------|------|------|
-| `1` | Git 可视化 | 提交历史、分支列表、热文件柱状图、仓库统计、目录扫描、最近记录 |
-| `2` | 日志查看器 | 分页浏览（每页 10 条）、正则过滤、级别筛选、跟随模式、彩色高亮、错误统计、目录扫描、最近记录 |
+|--------|------|:-----|
+| `1` | Git 可视化 | 提交历史、分支列表、ahead/behind 状态、工作区状态、热文件柱状图、仓库统计、目录扫描、最近记录、**数据缓存** |
+| `2` | 日志查看器 | 分页浏览（每页 10 条）、正则过滤、级别筛选、跟随模式、彩色高亮、错误统计、目录扫描、最近记录、**数据缓存** |
 | `3` | 天气面板 | 卡片式布局、3 天预报、ASCII 图标、滚动浏览、最近城市（数据来源 wttr.in） |
-| `4` | 配置浏览 | JSON/YAML/TOML 树形展示、折叠/展开、搜索高亮过滤、节点路径显示、语法高亮、最近记录 |
+| `4` | 配置浏览 | JSON/YAML/TOML 树形展示、折叠/展开、搜索高亮过滤、节点路径显示、语法高亮、最近记录、**数据缓存** |
 
 ## 安装与运行
 
@@ -65,15 +65,17 @@ cat app.log | ./devdash.exe
 - `↑` `↓` / `k` `j` - 滚动
 - `/` - 输入仓库路径（支持目录扫描，列出含 `.git` 的子目录）
 - 输入模式下 `↑` `↓` - 浏览最近使用的仓库
-- `Ctrl+R` - 刷新数据
+- `Ctrl+R` - 刷新数据（智能缓存：检测 `.git/index` 变化，未变化时使用缓存）
 
 **显示内容：**
 - 提交历史（Hash、作者、日期、消息）
 - 分支列表（当前分支高亮）
 - **ahead/behind 状态**（header 显示 `↑3 ↓2` 徽章，表示本地领先/落后远程的提交数）
-- **工作区 dirty 状态**（header 显示 `📝 3 modified, 1 untracked`，表示修改和未追踪的文件数）
+- **工作区 dirty 状态**（header 显示 `📝 3M 1A 2D 1??` 格式，分别表示 Modified/Added/Deleted/Untracked 文件数）
 - 热文件（变更最频繁的文件柱状图）
 - 仓库统计（总提交数、分支数、文件数、活跃天数）
+- **并发加载**（6 个 git 命令并发执行，加载速度显著提升）
+- **空状态提示**（无 commit 时显示 "📭 仓库暂无提交记录"）
 
 ### 日志模块 (`2`)
 - `↑` `↓` / `k` `j` - 页内光标移动
@@ -87,7 +89,7 @@ cat app.log | ./devdash.exe
 - `Ctrl+F` - 跟随模式（自动检测文件变化并刷新，再次按取消）
 - `Ctrl+U` - 清除过滤
 - `Esc` - 关闭输入框
-- `Ctrl+R` - 刷新日志
+- `Ctrl+R` - 刷新日志（智能缓存：检测文件 mtime 变化，未变化时使用缓存）
 
 **显示内容：**
 - 每页 10 条日志，分页浏览
@@ -96,6 +98,8 @@ cat app.log | ./devdash.exe
 - 匹配子串黄色背景高亮
 - 页码信息（当前页/总页数，条目范围）
 - 底部统计（各级别日志数量）
+- **空状态提示**（无匹配结果时显示 "🔍 没有找到匹配的日志行，尝试修改过滤条件"）
+- **友好错误提示**（文件不存在/权限错误时显示红色错误信息 + 操作提示）
 
 ### 天气模块 (`3`)
 - `↑` `↓` / `k` `j` - 滚动内容
@@ -113,7 +117,7 @@ cat app.log | ./devdash.exe
 - `Enter` - 折叠/展开节点
 - `/` - 输入文件路径（支持目录扫描，列出 `.json`/`.yaml`/`.yml`/`.toml` 文件）
 - 输入模式下 `↑` `↓` - 浏览最近使用的配置文件
-- `Ctrl+R` - 刷新配置文件
+- `Ctrl+R` - 刷新配置文件（智能缓存：检测文件 mtime 变化，未变化时使用缓存）
 - 输入字符 - 搜索键名/值（匹配子串高亮显示）
 - `Ctrl+N` / `Ctrl+B` - 跳转到下一个/上一个匹配项
 - `Ctrl+E` - 展开全部节点
@@ -127,6 +131,8 @@ cat app.log | ./devdash.exe
 - 搜索关键词高亮，快速跳转匹配项
 - 当前节点完整路径显示（header 区域 `📍 key1 / key2 / key3`）
 - 语法高亮（字符串、数字、布尔值、null）
+- **空状态提示**（空配置文件时显示 "📄 配置文件为空"）
+- **友好错误提示**（文件解析失败时显示红色错误信息 + 操作提示）
 
 ## 项目结构
 
@@ -138,7 +144,7 @@ cava_go/
 │   ├── ui/                        # 样式、颜色、渲染辅助函数
 │   │   ├── style.go               # 颜色常量、样式常量、TabState
 │   │   ├── box.go                 # Card()、Box()、BarChart()、RenderInputCard()、RenderDirListCard()
-│   │   ├── tabbar.go              # RenderTabBar()、RenderStatusBar()（双行 nano 风格状态栏）
+│   │   ├── tabbar.go              # RenderTabBar()、RenderStatusBar()
 │   │   ├── help_overlay.go        # RenderHelpOverlay()（居中帮助面板）
 │   │   ├── text.go                # Rune 系列函数、Truncate、PadRight、TrueWidth
 │   │   ├── app_config.go          # AppConfig 结构、Load/Save、CfgChangedMsg
@@ -151,15 +157,14 @@ cava_go/
 │   │   └── git_model.go           # Model + Init/Update/View
 │   ├── log/                       # 日志查看器模块
 │   │   ├── log_data.go            # 日志加载/扫描/级别检测
-│   │   └── log_model.go           # Model + Init/Update/View（分页渲染）
+│   │   └── log_model.go           # Model + Init/Update/View
 │   ├── weather/                   # 天气面板模块
 │   │   ├── weather_data.go        # wttr.in API 请求与解析
 │   │   └── weather_model.go       # Model + Init/Update/View
 │   └── config/                    # 配置浏览器模块
 │       ├── config_data.go         # JSON/YAML 解析与树构建
 │       └── config_model.go        # Model + Init/Update/View
-├── docs/                          # 项目文档
-└── example/                       # 示例代码
+└──
 ```
 
 ## 依赖
@@ -167,6 +172,7 @@ cava_go/
 - [bubbletea v2](https://github.com/charmbracelet/bubbletea) - 终端 UI 框架（`charm.land/bubbletea/v2`）
 - [lipgloss](https://github.com/charmbracelet/lipgloss) - 终端样式库
 - [yaml.v3](https://gopkg.in/yaml.v3) - YAML 解析
+- [BurntSushi/toml](https://github.com/BurntSushi/toml) - TOML 解析
 
 ## License
 

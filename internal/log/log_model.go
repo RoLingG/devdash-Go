@@ -288,6 +288,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 							return ScanDirCmd(path)
 						}
 						m.logPath = path
+						if m.reloadFromCache() {
+							return nil
+						}
 						m.filter = ""
 						return LoadFromFileCmd(path)
 					}
