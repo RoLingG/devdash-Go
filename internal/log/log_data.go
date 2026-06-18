@@ -17,10 +17,19 @@ type Line struct {
 	Level string
 }
 
+// 大文件阈值
+const (
+	MaxFileSize  = 100 * 1024 * 1024 // 100MB
+	MaxLines     = 1000000           // 100万行
+	WarnFileSize = 50 * 1024 * 1024  // 50MB 开始警告
+)
+
 // LoadMsg 从文件或 stdin 加载完成后的消息
 type LoadMsg struct {
 	Lines []Line
 	Err   error
+	Warn  string // 大文件警告信息
+	Trunc bool   // 是否被截断
 }
 
 // DirMsg 目录扫描结果
@@ -48,6 +57,9 @@ func LoadFromStdin() tea.Msg {
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 		for scanner.Scan() {
 			raw := scanner.Text()
+			if raw == "" {
+				continue
+			}
 			lines = append(lines, Line{Raw: raw, Level: detectLevel(raw)})
 		}
 		return LoadMsg{Lines: lines}
@@ -62,17 +74,50 @@ func LoadFromFile(path string) tea.Msg {
 		return LoadMsg{Err: fmt.Errorf("cannot open: %s (%v)", path, err)}
 	}
 	defer f.Close()
+
+	// 检测文件大小
+	stat, err := f.Stat()
+	if err != nil {
+		return LoadMsg{Err: fmt.Errorf("cannot stat: %s (%v)", path, err)}
+	}
+	fileSize := stat.Size()
+
+	// 检查文件大小限制
+	if fileSize > MaxFileSize {
+		sizeMB := float64(fileSize) / 1024 / 1024
+		return LoadMsg{Err: fmt.Errorf("文件过大（%.1fMB），超过限制（%dMB）", sizeMB, MaxFileSize/1024/1024)}
+	}
+
 	var lines []Line
+	var warnMsg string
+	truncated := false
+
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+
 	for scanner.Scan() {
 		raw := scanner.Text()
 		lines = append(lines, Line{Raw: raw, Level: detectLevel(raw)})
+
+		// 检查行数限制
+		if len(lines) >= MaxLines {
+			truncated = true
+			warnMsg = fmt.Sprintf("文件行数过多（>%d行），已截断显示", MaxLines)
+			break
+		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		return LoadMsg{Lines: lines, Err: fmt.Errorf("read error: %v", err)}
 	}
-	return LoadMsg{Lines: lines}
+
+	// 生成警告信息
+	if warnMsg == "" && fileSize >= WarnFileSize {
+		sizeMB := float64(fileSize) / 1024 / 1024
+		warnMsg = fmt.Sprintf("大文件警告：%.1fMB，%d行", sizeMB, len(lines))
+	}
+
+	return LoadMsg{Lines: lines, Warn: warnMsg, Trunc: truncated}
 }
 
 // ScanDir 扫描目录下所有 .log 文件

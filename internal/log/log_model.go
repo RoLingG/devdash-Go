@@ -24,6 +24,8 @@ type Model struct {
 	filter   string
 	loaded   bool
 	errMsg   string
+	warnMsg  string // 大文件警告
+	trunc    bool   // 是否被截断
 	logPath  string
 
 	page      int
@@ -139,8 +141,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.errMsg = msg.Err.Error()
 			m.loaded = true
-			m.input.Prompt = "Log file path:"
-			m.input.Open(m.logPath)
+			// 通过命令行参数加载时，不打开输入框，直接显示错误信息
+			// 只有通过用户手动输入路径时才打开输入框
+			if m.input.Active {
+				m.input.Prompt = "Log file path:"
+				m.input.Open(m.logPath)
+			}
 			return m, nil
 		}
 		lines := msg.Lines
@@ -149,6 +155,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		m.all = lines
 		m.loaded = true
+		m.warnMsg = msg.Warn
+		m.trunc = msg.Trunc
 		m.cachedLines = lines
 		m.cachedPath = m.logPath
 		if info, err := os.Stat(m.logPath); err == nil {
@@ -317,13 +325,13 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.cursor++
 			}
 		// 翻页
-		case "[":
+		case "left":
 			if m.page > 0 {
 				m.page--
 				m.cursor = 0
 				m.scrollOff = 0
 			}
-		case "]":
+		case "right":
 			if m.page < m.totalPages()-1 {
 				m.page++
 				m.cursor = 0
@@ -534,6 +542,13 @@ func (m *Model) View() string {
 		lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  "+pageInfo)
 	lines = append(lines, headerLine)
 	lines = append(lines, "")
+
+	// 大文件警告
+	if m.warnMsg != "" {
+		warnStyle := lipgloss.NewStyle().Foreground(ui.ColAccent).Bold(true)
+		lines = append(lines, warnStyle.Render("  ⚠ "+m.warnMsg))
+		lines = append(lines, "")
+	}
 
 	// 空状态提示
 	if len(m.filtered) == 0 {

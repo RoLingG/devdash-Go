@@ -319,6 +319,132 @@ func (m *Model) View() string {
 	return strings.Join(lines[start:end], "\n")
 }
 
+// TODO: 现在的各个模块即便过长都有长度限制，日后如果优化成长内容显示，则需要虚拟滚动进行渲染优化了
+// renderVisibleSections 虚拟滚动：只渲染可见的 section
+func (m *Model) renderVisibleSections(cardWidth int) []string {
+	// 计算每个 section 的大致行数（用于判断可见性）
+	sectionLines := m.calcSectionLines()
+
+	// 计算总行数
+	totalLines := 0
+	for _, lines := range sectionLines {
+		totalLines += lines
+	}
+	// section 之间有空行分隔
+	totalLines += 3 // 4个section之间3个空行
+
+	// 计算可见行数
+	top := m.height - 3
+	if top < 5 {
+		top = 5
+	}
+
+	// 边界检查
+	if m.scroll > totalLines-top {
+		m.scroll = totalLines - top
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+
+	start := m.scroll
+	end := start + top
+
+	// 判断哪些 section 在可见范围内
+	var result []string
+	currentLine := 0
+
+	// 定义 section 渲染函数
+	renderFuncs := []func() string{
+		m.viewCommits,
+		m.viewBranches,
+		m.viewFiles,
+		m.viewStats,
+	}
+
+	for i, lines := range sectionLines {
+		sectionStart := currentLine
+		sectionEnd := currentLine + lines
+
+		// 检查 section 是否在可见范围内
+		if sectionEnd > start && sectionStart < end {
+			// 需要渲染这个 section
+			rendered := renderFuncs[i]()
+			renderedLines := strings.Split(rendered, "\n")
+
+			// 计算在这个 section 内需要显示的行
+			sectionVisibleStart := 0
+			if start > sectionStart {
+				sectionVisibleStart = start - sectionStart
+			}
+			sectionVisibleEnd := len(renderedLines)
+			if end < sectionEnd {
+				sectionVisibleEnd = end - sectionStart
+			}
+
+			// 边界检查
+			if sectionVisibleStart < 0 {
+				sectionVisibleStart = 0
+			}
+			if sectionVisibleEnd > len(renderedLines) {
+				sectionVisibleEnd = len(renderedLines)
+			}
+			if sectionVisibleStart < sectionVisibleEnd {
+				result = append(result, renderedLines[sectionVisibleStart:sectionVisibleEnd]...)
+			}
+		}
+
+		currentLine = sectionEnd
+		// section 之间的空行
+		if i < len(sectionLines)-1 {
+			currentLine++
+			if currentLine > start && currentLine < end && sectionEnd > start && sectionStart < end {
+				result = append(result, "")
+			}
+		}
+	}
+
+	return result
+}
+
+// calcSectionLines 计算每个 section 的大致行数
+func (m *Model) calcSectionLines() []int {
+	lines := make([]int, 4)
+
+	// 1. Commits section
+	// 固定开销：标题行(1) + 路径行(1) + header行(1) + 空行(1) + 表头行(1) + 分隔线(1) + 边框上下(2) + 内边距(2) = 10行
+	commitFixed := 10
+	commitDataLines := len(m.info.Commits)
+	if commitDataLines == 0 {
+		commitDataLines = 1 // 空状态提示
+	}
+	lines[0] = commitFixed + commitDataLines
+
+	// 2. Branches section
+	// 固定开销：标题行(1) + 边框上下(2) + 内边距(2) = 5行
+	branchFixed := 5
+	branchDataLines := len(m.info.Branches)
+	if branchDataLines == 0 {
+		branchDataLines = 1 // 空状态提示
+	}
+	lines[1] = branchFixed + branchDataLines
+
+	// 3. Files section
+	// 固定开销：标题行(1) + 比例行(1) + 边框上下(2) + 内边距(2) = 6行
+	fileFixed := 6
+	fileDataLines := len(m.info.Files)
+	if fileDataLines == 0 {
+		fileDataLines = 1 // 空状态提示
+	}
+	lines[2] = fileFixed + fileDataLines
+
+	// 4. Stats section
+	// 固定开销：标题行(1) + 统计项(5) + 边框上下(2) + 内边距(2) = 10行
+	lines[3] = 10
+
+	return lines
+}
+
 func (m *Model) viewCommits() string {
 	repoPath := m.repoPath
 	if repoPath == "" || repoPath == "." {

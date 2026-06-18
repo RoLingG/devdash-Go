@@ -176,6 +176,9 @@ func (m ConfigSelectModel) View() tea.View {
 			leftPad = 0
 		}
 		rightPad := m.width - leftPad - w
+		if rightPad < 0 {
+			rightPad = 0
+		}
 		centered = append(centered, strings.Repeat(" ", leftPad)+line+strings.Repeat(" ", rightPad))
 	}
 
