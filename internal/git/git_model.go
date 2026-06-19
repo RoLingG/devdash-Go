@@ -131,7 +131,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.dirListing = false
 
 	case DirMsg:
-		if msg.Repos == nil || len(msg.Repos) == 0 {
+		if len(msg.Repos) == 0 {
 			m.err = fmt.Errorf("no git repos found in: %s", msg.Dir)
 			m.input.Open(m.dirPath)
 			m.dirListing = false
@@ -321,6 +321,7 @@ func (m *Model) View() string {
 
 // TODO: 现在的各个模块即便过长都有长度限制，日后如果优化成长内容显示，则需要虚拟滚动进行渲染优化了
 // renderVisibleSections 虚拟滚动：只渲染可见的 section
+//nolint:unused // 预留的虚拟滚动代码，日后可能用到
 func (m *Model) renderVisibleSections(cardWidth int) []string {
 	// 计算每个 section 的大致行数（用于判断可见性）
 	sectionLines := m.calcSectionLines()
@@ -408,6 +409,7 @@ func (m *Model) renderVisibleSections(cardWidth int) []string {
 }
 
 // calcSectionLines 计算每个 section 的大致行数
+//nolint:unused // 预留的虚拟滚动代码，配合 renderVisibleSections 使用
 func (m *Model) calcSectionLines() []int {
 	lines := make([]int, 4)
 

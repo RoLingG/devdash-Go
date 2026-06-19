@@ -104,7 +104,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.rebuildLines()
 
 	case DirMsg:
-		if msg.Files == nil || len(msg.Files) == 0 {
+		if len(msg.Files) == 0 {
 			m.errMsg = fmt.Sprintf("no config files found in: %s", msg.Dir)
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.dirPath)
@@ -273,19 +273,16 @@ func (m *Model) View() string {
 
 	// 主要内容
 	var sb strings.Builder
-	headerLines := 0
 	if m.loaded {
 		nodes := countNodes(m.root)
 		info := fmt.Sprintf("📂 %s • %d nodes • %d/%d", m.configPath, nodes, m.cursor+1, len(m.lines))
 		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  " + info))
 		sb.WriteString("\n")
-		headerLines += 2
 	}
 	if m.filter != "" {
 		hint := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  ctrl+u clear")
 		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  Search: "+m.filter) + hint)
 		sb.WriteString("\n\n")
-		headerLines++
 	}
 	// 显示当前节点完整路径
 	if len(m.lines) > 0 && m.cursor < len(m.lines) {
@@ -298,11 +295,9 @@ func (m *Model) View() string {
 			}
 			sb.WriteString("  " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render("📍") + " " + strings.Join(styled, sep))
 			sb.WriteString("\n")
-			headerLines++
 		}
 	}
 	sb.WriteString("\n")
-	headerLines++
 
 	// 空状态提示
 	if len(m.lines) == 0 {

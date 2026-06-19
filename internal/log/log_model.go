@@ -169,7 +169,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.applyFilter()
 
 	case DirMsg:
-		if msg.Files == nil || len(msg.Files) == 0 {
+		if len(msg.Files) == 0 {
 			m.errMsg = "No .log files found in: " + msg.Dir
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.dirPath)

@@ -81,7 +81,7 @@ func RenderInputCard(opts InputCardOpts) string {
 		sb.WriteString(lipgloss.NewStyle().Foreground(ColMuted).Render("  Recent:"))
 		sb.WriteString("\n")
 		for i, item := range opts.RecentItems {
-			marker := "  "
+			var marker string
 			style := lipgloss.NewStyle().Foreground(ColMuted)
 			if i == opts.RecentIdx {
 				marker = lipgloss.NewStyle().Foreground(ColAccent).Render("▸ ")
