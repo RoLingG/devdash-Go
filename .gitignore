@@ -3,3 +3,4 @@ example
 devdash.exe
 devdash.exe~
 devdash.json
+*_test.go

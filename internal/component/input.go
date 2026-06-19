@@ -130,7 +130,7 @@ func (m *InputModel) Update(msg tea.Msg, onSubmit func(value string) func() tea.
 			}
 		default:
 			key := msg.String()
-			if len(key) == 1 && key >= " " {
+			if ui.RuneLen(key) == 1 && key >= " " {
 				m.Value = ui.RuneInsert(m.Value, key, m.Cursor)
 				m.Cursor++
 				m.recentIdx = -1
