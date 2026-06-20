@@ -8,7 +8,7 @@ import (
 
 // RenderTabBar 渲染顶部 Tab 栏
 func RenderTabBar(active TabState, width int) string {
-	labels := []string{"1: Git", "2: Log", "3: Weather", "4: Config"}
+	labels := []string{"1:Git", "2:Log", "3:Weather", "4:Config", "5:System", "6:Ports"}
 	var parts []string
 	for i, label := range labels {
 		if TabState(i) == active {
@@ -64,6 +64,16 @@ func RenderStatusBar(active TabState, width int) string {
 	case TabConfig:
 		line1 := helpLine([]string{"\u2191\u2193 Scroll", "Enter Toggle", "/ Open", "^N/B Match", "^E/W All"}, width, sep)
 		line2 := helpLine([]string{"Type Filter", "^U Clear", "Esc Close", "? Help", "^R Refresh", "^Q Quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabSystem:
+		line1 := helpLine([]string{"\u2191\u2193 Scroll", "Tab Switch", "/ Filter", "^R Refresh"}, width, sep)
+		line2 := helpLine([]string{"^U Clear", "? Help", "1-6 Tab", "^Q Quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabPorts:
+		line1 := helpLine([]string{"\u2191\u2193 Scroll", "/ Add Port", "^R Refresh", "? Help"}, width, sep)
+		line2 := helpLine([]string{"1-6 Tab", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""

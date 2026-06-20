@@ -1,11 +1,13 @@
 // ============================================================================
 // devdash — 开发者终端工具箱
 //
-// 4 个模块，数字键 1-4 切换，q 退出：
+// 6 个模块，数字键 1-6 切换，q 退出：
 //   [1] Git 可视化 — 分支图、提交历史、热文件、贡献者排行
 //   [2] 日志查看器 — 彩色高亮、正则过滤、错误统计
 //   [3] 天气面板   — ASCII 天气动画、7 天预报
 //   [4] 配置浏览   — JSON/YAML 折叠展开、语法高亮
+//   [5] 系统监控   — CPU/内存/磁盘、进程列表
+//   [6] 端口扫描   — 常用端口状态检测
 // ============================================================================
 
 package main
@@ -20,6 +22,8 @@ import (
 	"cava_go/internal/config"
 	"cava_go/internal/git"
 	"cava_go/internal/log"
+	"cava_go/internal/ports"
+	"cava_go/internal/system"
 	"cava_go/internal/ui"
 	"cava_go/internal/weather"
 )
@@ -37,6 +41,8 @@ type model struct {
 	log         *log.Model     // 日志查看器子模块
 	weather     *weather.Model // 天气面板子模块
 	config      *config.Model  // 配置浏览器子模块
+	sys         *system.Model  // 系统监控子模块
+	ports       *ports.Model   // 端口扫描子模块
 }
 
 // Init 应用启动时执行的初始化命令
@@ -53,6 +59,8 @@ func (m model) Init() tea.Cmd {
 		m.log.Init(m.appCfg.LastLogPath),
 		m.weather.Init(m.appCfg.DefaultCity),
 		m.config.Init(m.appCfg.LastConfigPath),
+		m.sys.Init(),
+		m.ports.Init(),
 	)
 }
 
@@ -94,6 +102,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.log.UpdateSize(msg.Width, msg.Height)
 		m.weather.UpdateSize(msg.Width, msg.Height)
 		m.config.UpdateSize(msg.Width, msg.Height)
+		m.sys.UpdateSize(msg.Width, msg.Height)
+		m.ports.UpdateSize(msg.Width, msg.Height)
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -121,15 +131,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		// ? 切换帮助面板（排除输入框活跃状态）
 		case "?":
-			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() {
+			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() {
 				// 输入框活跃时，? 透传给模块
 				break
 			}
 			m.helpOverlay = true
 			return m, nil
 		// 数字键切换 Tab（全局快捷键），输入框活跃时透传给当前模块
-		case "1", "2", "3", "4":
-			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() {
+		case "1", "2", "3", "4", "5", "6":
+			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() {
 				break // 透传给模块处理
 			}
 			switch msg.String() {
@@ -141,6 +151,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = ui.TabWeather
 			case "4":
 				m.state = ui.TabConfig
+			case "5":
+				m.state = ui.TabSystem
+			case "6":
+				m.state = ui.TabPorts
 			}
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
 		}
@@ -167,6 +181,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case system.SysInfoMsg, system.ProcMsg:
+		var cmd tea.Cmd
+		m.sys, cmd = m.sys.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case ports.PortsMsg:
+		var cmd tea.Cmd
+		m.ports, cmd = m.ports.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// 把消息转发给当前激活的子模块处理
@@ -187,6 +213,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ui.TabConfig:
 		var cmd tea.Cmd
 		m.config, cmd = m.config.Update(msg)
+		cmds = append(cmds, cmd)
+	case ui.TabSystem:
+		var cmd tea.Cmd
+		m.sys, cmd = m.sys.Update(msg)
+		cmds = append(cmds, cmd)
+	case ui.TabPorts:
+		var cmd tea.Cmd
+		m.ports, cmd = m.ports.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -209,6 +243,10 @@ func (m model) View() tea.View {
 		content = m.weather.View()
 	case ui.TabConfig:
 		content = m.config.View()
+	case ui.TabSystem:
+		content = m.sys.View()
+	case ui.TabPorts:
+		content = m.ports.View()
 	}
 
 	// 帮助面板覆盖在主内容上
@@ -274,6 +312,8 @@ func main() {
 		config:  &config.Model{},
 		git:     &git.Model{},
 		log:     &log.Model{},
+		sys:     &system.Model{},
+		ports:   &ports.Model{},
 	}
 	p3 := tea.NewProgram(m)
 	if _, err := p3.Run(); err != nil {

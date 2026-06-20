@@ -24,6 +24,8 @@ const (
 	TabLog
 	TabWeather
 	TabConfig
+	TabSystem
+	TabPorts
 )
 
 // ---- 共享样式 ----

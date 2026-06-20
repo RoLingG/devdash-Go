@@ -1,6 +1,6 @@
 # devdash - 开发者终端工具箱
 
-一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 4 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
+一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 6 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
 
 ## 功能模块
 
@@ -10,6 +10,8 @@
 | `2` | 日志查看器 | 分页浏览（每页 10 条）、正则过滤、级别筛选、跟随模式、彩色高亮、错误统计、目录扫描、最近记录、**数据缓存** |
 | `3` | 天气面板 | 卡片式布局、3 天预报、ASCII 图标、滚动浏览、最近城市（数据来源 wttr.in） |
 | `4` | 配置浏览 | JSON/YAML/TOML 树形展示、折叠/展开、搜索高亮过滤、节点路径显示、语法高亮、最近记录、**数据缓存** |
+| `5` | 系统监控 | CPU 总体/每核心使用率、内存/磁盘进度条、进程列表、阈值颜色预警、Tab 切换子视图 |
+| `6` | 端口扫描 | 预设开发端口扫描、自定义端口、并发扫描、状态显示 |
 
 ## 安装与运行
 
@@ -56,7 +58,7 @@ cat app.log | ./devdash.exe
 
 | 快捷键 | 功能 |
 |--------|------|
-| `1` `2` `3` `4` | 切换模块 |
+| `1` `2` `3` `4` `5` `6` | 切换模块 |
 | `?` | 帮助面板（显示当前模块快捷键） |
 | `Ctrl+S` | 保存配置 |
 | `Ctrl+Q` / `Ctrl+C` | 退出 |
@@ -135,6 +137,36 @@ cat app.log | ./devdash.exe
 - **空状态提示**（空配置文件时显示 "📄 配置文件为空"）
 - **友好错误提示**（文件解析失败时显示红色错误信息 + 操作提示）
 
+### 系统监控模块 (`5`)
+- `Tab` - 切换子视图（系统概览 ↔ 进程列表）
+- `↑` `↓` / `k` `j` - 滚动
+- `Home` / `End` - 跳转首/末
+- `/` - 打开输入（进程名 filter）
+- `Ctrl+R` - 刷新数据
+- `Ctrl+U` - 清空 filter
+- `Esc` - 关闭输入框
+
+**显示内容：**
+- CPU 总体使用率 + 每核心使用率（4 列网格平铺，窄终端自动 2 列）
+- 内存使用（已用/总量 + 进度条）
+- 磁盘使用（各分区已用/总量 + 进程条）
+- 进程列表（PID、名称、CPU%、内存 MB，按 CPU 降序）
+- **阈值颜色系统**（<70% 灰色、>=70% 黄色、>=90% 红色）
+- **CPU 核心奇偶标签色**（偶数蓝色、奇数粉色，便于区分）
+
+### 端口扫描模块 (`6`)
+- `↑` `↓` / `k` `j` - 滚动端口列表
+- `Home` / `End` - 跳转首/末
+- `/` - 添加自定义端口
+- `Ctrl+R` - 重新扫描
+- `Ctrl+U` - 清空自定义端口
+- `Esc` - 关闭输入框
+
+**显示内容：**
+- 17 个预设开发端口（SSH、HTTP、HTTPS、MySQL、PostgreSQL、Redis 等）
+- 并发扫描（500ms 超时），开放端口绿色 ✓、关闭端口灰色 ✗
+- 用户自定义端口支持
+
 ## 项目结构
 
 ```
@@ -162,9 +194,15 @@ cava_go/
 │   ├── weather/                   # 天气面板模块
 │   │   ├── weather_data.go        # wttr.in API 请求与解析
 │   │   └── weather_model.go       # Model + Init/Update/View
-│   └── config/                    # 配置浏览器模块
-│       ├── config_data.go         # JSON/YAML 解析与树构建
-│       └── config_model.go        # Model + Init/Update/View
+│   ├── config/                    # 配置浏览器模块
+│   │   ├── config_data.go         # JSON/YAML 解析与树构建
+│   │   └── config_model.go        # Model + Init/Update/View
+│   ├── system/                    # 系统监控模块
+│   │   ├── system_data.go         # gopsutil 系统信息采集（CPU/内存/磁盘/进程）
+│   │   └── system_model.go        # Model + Init/Update/View
+│   └── ports/                     # 端口扫描模块
+│       ├── ports_data.go          # 端口扫描逻辑（并发 + 超时）
+│       └── ports_model.go         # Model + Init/Update/View
 └──
 ```
 
@@ -174,6 +212,7 @@ cava_go/
 - [lipgloss](https://github.com/charmbracelet/lipgloss) - 终端样式库
 - [yaml.v3](https://gopkg.in/yaml.v3) - YAML 解析
 - [BurntSushi/toml](https://github.com/BurntSushi/toml) - TOML 解析
+- [gopsutil/v4](https://github.com/shirou/gopsutil) - 跨平台系统信息采集（CPU/内存/磁盘/进程）
 
 ## License
 

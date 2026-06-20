@@ -20,12 +20,14 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 		TabLog:     "Log 快捷键",
 		TabWeather: "Weather 快捷键",
 		TabConfig:  "Config 快捷键",
+		TabSystem:  "System 快捷键",
+		TabPorts:   "Ports 快捷键",
 	}
 
 	items := map[TabState][]HelpItem{
 		TabGit: {
 			{"↑↓", "scroll commits"}, {"Home/End", "first/last"}, {"/", "change repo"}, {"ctrl+r", "refresh"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-6", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabLog: {
@@ -33,20 +35,32 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"ctrl+↑↓", "fast ±10 pages"}, {"ctrl+p", "jump to page"},
 			{"/", "open path"}, {"type", "filter"}, {"ctrl+l", "level filter"},
 			{"ctrl+u", "clear filter"}, {"ctrl+f", "follow mode"},
-			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
+			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"Esc", "close"}, {"1-6", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabWeather: {
 			{"↑↓", "scroll content"}, {"Home/End", "first/last"}, {"/", "change city"}, {"ctrl+r", "refresh"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-6", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
 		},
 		TabConfig: {
 			{"↑↓", "move cursor"}, {"Home/End", "first/last"}, {"enter", "toggle node"}, {"/", "open file"},
 			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"ctrl+n/b", "next/prev match"},
 			{"ctrl+u", "clear search"}, {"ctrl+e", "expand all"}, {"ctrl+w", "collapse all"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1/2/3/4", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-6", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
+		},
+		TabSystem: {
+			{"↑↓", "scroll"}, {"Home/End", "first/last"}, {"tab", "switch view"}, {"/", "filter process"},
+			{"ctrl+r", "refresh"}, {"ctrl+u", "clear filter"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-6", "switch tab"},
+			{"ctrl+q", "quit"},
+		},
+		TabPorts: {
+			{"↑↓", "scroll"}, {"Home/End", "first/last"}, {"/", "add port"},
+			{"ctrl+r", "rescan"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-6", "switch tab"},
+			{"ctrl+q", "quit"},
 		},
 	}
 
