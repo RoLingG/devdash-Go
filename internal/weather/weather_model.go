@@ -104,6 +104,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			if m.scroll < maxScroll {
 				m.scroll++
 			}
+		case "home":
+			m.scroll = 0
+		case "end":
+			m.scroll = 1 << 30 // View 中会自动 clamp 到有效范围
 		}
 	}
 	return m, nil

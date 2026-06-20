@@ -185,6 +185,14 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.cursor++
 				m.clampScroll()
 			}
+		case "home":
+			m.cursor = 0
+			m.clampScroll()
+		case "end":
+			if len(m.lines) > 0 {
+				m.cursor = len(m.lines) - 1
+			}
+			m.clampScroll()
 		case "enter":
 			m.toggleNode(m.cursor)
 			m.rebuildLines()

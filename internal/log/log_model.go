@@ -350,6 +350,25 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.clampPage()
 			m.cursor = 0
 			m.scrollOff = 0
+		case "home":
+			m.page = 0
+			m.cursor = 0
+			m.scrollOff = 0
+		case "end":
+			m.page = m.totalPages() - 1
+			if m.page < 0 {
+				m.page = 0
+			}
+			start := m.page * logPageSize
+			end := start + logPageSize
+			if end > len(m.filtered) {
+				end = len(m.filtered)
+			}
+			m.cursor = end - start - 1
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+			m.scrollOff = 0
 		// 页码跳转
 		case "ctrl+p":
 			m.pageInput = true
