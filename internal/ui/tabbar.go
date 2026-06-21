@@ -8,7 +8,7 @@ import (
 
 // RenderTabBar 渲染顶部 Tab 栏
 func RenderTabBar(active TabState, width int) string {
-	labels := []string{"1:Git", "2:Log", "3:Weather", "4:Config", "5:System", "6:Ports"}
+	labels := []string{"1:Git", "2:Log", "3:Weather", "4:Config", "5:System", "6:Ports", "7:LinuxDo"}
 	var parts []string
 	for i, label := range labels {
 		if TabState(i) == active {
@@ -47,33 +47,38 @@ func RenderStatusBar(active TabState, width int) string {
 
 	switch active {
 	case TabGit:
-		line1 := helpLine([]string{"\u2191\u2193 Scroll", "/ Open", "? Help"}, width, sep)
+		line1 := helpLine([]string{"↑/↓ Scroll", "/ Open", "? Help"}, width, sep)
 		line2 := helpLine([]string{"^S Save", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabLog:
-		line1 := helpLine([]string{"\u2191\u2193 Scroll", "[ ] Page", "/ Open", "^P Jump", "^L Level", "^F Follow"}, width, sep)
+		line1 := helpLine([]string{"↑/↓ Scroll", "←/→ Page", "/ Open", "^P Jump", "^L Level", "^F Follow"}, width, sep)
 		line2 := helpLine([]string{"Type Filter", "^U Clear", "Esc Close", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabWeather:
-		line1 := helpLine([]string{"\u2191\u2193 Scroll", "/ Open", "? Help"}, width, sep)
+		line1 := helpLine([]string{"↑/↓ Scroll", "/ Open", "? Help"}, width, sep)
 		line2 := helpLine([]string{"^S Save", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabConfig:
-		line1 := helpLine([]string{"\u2191\u2193 Scroll", "Enter Toggle", "/ Open", "^N/B Match", "^E/W All"}, width, sep)
+		line1 := helpLine([]string{"↑/↓ Scroll", "Enter Toggle", "/ Open", "^N/B Match", "^E/W All"}, width, sep)
 		line2 := helpLine([]string{"Type Filter", "^U Clear", "Esc Close", "? Help", "^R Refresh", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabSystem:
-		line1 := helpLine([]string{"\u2191\u2193 Scroll", "Tab Switch", "/ Filter", "^R Refresh"}, width, sep)
-		line2 := helpLine([]string{"^U Clear", "? Help", "1-6 Tab", "^Q Quit"}, width, sep)
+		line1 := helpLine([]string{"↑/↓ Scroll", "Tab Switch", "/ Filter", "^R Refresh"}, width, sep)
+		line2 := helpLine([]string{"^U Clear", "? Help", "1-7 Tab", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabPorts:
-		line1 := helpLine([]string{"\u2191\u2193 Scroll", "/ Add Port", "^R Refresh", "? Help"}, width, sep)
-		line2 := helpLine([]string{"1-6 Tab", "^Q Quit"}, width, sep)
+		line1 := helpLine([]string{"↑/↓ Scroll", "/ Add Port", "^R Refresh", "? Help"}, width, sep)
+		line2 := helpLine([]string{"1-7 Tab", "^Q Quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabLinuxDo:
+		line1 := helpLine([]string{"↑/↓ Scroll", "^↑/↓ ±10", "Enter Open", "Esc Back"}, width, sep)
+		line2 := helpLine([]string{"1-7 Tab", "^Q Quit", "/ Cookie", "^R Refresh"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""

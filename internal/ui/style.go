@@ -26,6 +26,7 @@ const (
 	TabConfig
 	TabSystem
 	TabPorts
+	TabLinuxDo
 )
 
 // ---- 共享样式 ----

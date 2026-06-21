@@ -1,6 +1,6 @@
 # devdash - 开发者终端工具箱
 
-一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 6 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
+一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 7 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
 
 ## 功能模块
 
@@ -12,6 +12,7 @@
 | `4` | 配置浏览 | JSON/YAML/TOML 树形展示、折叠/展开、搜索高亮过滤、节点路径显示、语法高亮、最近记录、**数据缓存** |
 | `5` | 系统监控 | CPU 总体/每核心使用率、内存/磁盘进度条、进程列表、阈值颜色预警、Tab 切换子视图 |
 | `6` | 端口扫描 | 预设开发端口扫描、自定义端口、并发扫描、状态显示 |
+| `7` | LinuxDo 论坛 | 分类浏览、帖子列表、帖子详情、无限滚动、Cookie 认证 |
 
 ## 安装与运行
 
@@ -58,7 +59,7 @@ cat app.log | ./devdash.exe
 
 | 快捷键 | 功能 |
 |--------|------|
-| `1` `2` `3` `4` `5` `6` | 切换模块 |
+| `1` `2` `3` `4` `5` `6` `7` | 切换模块 |
 | `?` | 帮助面板（显示当前模块快捷键） |
 | `Ctrl+S` | 保存配置 |
 | `Ctrl+Q` / `Ctrl+C` | 退出 |
@@ -167,6 +168,23 @@ cat app.log | ./devdash.exe
 - 并发扫描（500ms 超时），开放端口绿色 ✓、关闭端口灰色 ✗
 - 用户自定义端口支持
 
+### LinuxDo 论坛模块 (`7`)
+- `↑` `↓` / `k` `j` - 滚动/移动选中
+- `Home` / `End` - 跳转首/末
+- `Enter` - 进入下级（分类→帖子列表→帖子详情）
+- `Esc` - 返回上级
+- `Ctrl+↑` `Ctrl+↓` - 快速滚动 ±10 条
+- `/` - 设置 Cookie / User-Agent
+- `Ctrl+R` - 刷新当前视图
+- `Ctrl+U` - 清空 Cookie
+
+**显示内容：**
+- 三级导航：分类列表 → 帖子列表 → 帖子详情
+- 分类列表（首项 "📌 Latest" 显示全站最新帖子）
+- 帖子列表（标题、回复数、浏览量，无限滚动自动加载下一页）
+- 帖子详情（HTML→纯文本转换，无限滚动自动加载全部回复）
+- 帖子总数统计（header 显示 `(已加载/总数)` 格式）
+
 ## 项目结构
 
 ```
@@ -203,6 +221,9 @@ cava_go/
 │   └── ports/                     # 端口扫描模块
 │       ├── ports_data.go          # 端口扫描逻辑（并发 + 超时）
 │       └── ports_model.go         # Model + Init/Update/View
+│   └── linuxdo/                   # LinuxDo 论坛模块
+│       ├── linuxdo_data.go        # 数据类型、Discourse API 请求、HTML→纯文本
+│       └── linuxdo_model.go       # Model + Init/Update/View（三级视图）
 └──
 ```
 

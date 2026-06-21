@@ -1,13 +1,14 @@
 // ============================================================================
 // devdash — 开发者终端工具箱
 //
-// 6 个模块，数字键 1-6 切换，q 退出：
+// 7 个模块，数字键 1-7 切换，q 退出：
 //   [1] Git 可视化 — 分支图、提交历史、热文件、贡献者排行
 //   [2] 日志查看器 — 彩色高亮、正则过滤、错误统计
 //   [3] 天气面板   — ASCII 天气动画、7 天预报
 //   [4] 配置浏览   — JSON/YAML 折叠展开、语法高亮
 //   [5] 系统监控   — CPU/内存/磁盘、进程列表
 //   [6] 端口扫描   — 常用端口状态检测
+//   [7] LinuxDo   — linux.do 论坛浏览（个人模块）
 // ============================================================================
 
 package main
@@ -21,6 +22,7 @@ import (
 
 	"cava_go/internal/config"
 	"cava_go/internal/git"
+	"cava_go/internal/linuxdo"
 	"cava_go/internal/log"
 	"cava_go/internal/ports"
 	"cava_go/internal/system"
@@ -43,6 +45,7 @@ type model struct {
 	config      *config.Model  // 配置浏览器子模块
 	sys         *system.Model  // 系统监控子模块
 	ports       *ports.Model   // 端口扫描子模块
+	linuxdo     *linuxdo.Model // LinuxDo 论坛子模块
 }
 
 // Init 应用启动时执行的初始化命令
@@ -61,6 +64,7 @@ func (m model) Init() tea.Cmd {
 		m.config.Init(m.appCfg.LastConfigPath),
 		m.sys.Init(),
 		m.ports.Init(),
+		m.linuxdo.Init(m.appCfg.LinuxDoCookie, m.appCfg.LinuxDoUserAgent),
 	)
 }
 
@@ -89,6 +93,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appCfg.LastConfigPath = msg.Value
 			m.appCfg.RecentConfigFiles = ui.AddToRecent(m.appCfg.RecentConfigFiles, msg.Value, 10)
 			m.config.SetRecent(m.appCfg.RecentConfigFiles)
+		case "linuxdoCookie":
+			m.appCfg.LinuxDoCookie = msg.Value
+			m.linuxdo.SetCookie(msg.Value)
+		case "linuxdoUserAgent":
+			m.appCfg.LinuxDoUserAgent = msg.Value
+			m.linuxdo.SetUserAgent(msg.Value)
 		}
 		return m, nil
 	}
@@ -104,6 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.config.UpdateSize(msg.Width, msg.Height)
 		m.sys.UpdateSize(msg.Width, msg.Height)
 		m.ports.UpdateSize(msg.Width, msg.Height)
+		m.linuxdo.UpdateSize(msg.Width, msg.Height)
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -131,15 +142,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		// ? 切换帮助面板（排除输入框活跃状态）
 		case "?":
-			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() {
+			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() {
 				// 输入框活跃时，? 透传给模块
 				break
 			}
 			m.helpOverlay = true
 			return m, nil
 		// 数字键切换 Tab（全局快捷键），输入框活跃时透传给当前模块
-		case "1", "2", "3", "4", "5", "6":
-			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() {
+		case "1", "2", "3", "4", "5", "6", "7":
+			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() {
 				break // 透传给模块处理
 			}
 			switch msg.String() {
@@ -155,6 +166,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = ui.TabSystem
 			case "6":
 				m.state = ui.TabPorts
+			case "7":
+				m.state = ui.TabLinuxDo
 			}
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
 		}
@@ -193,6 +206,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg:
+		var cmd tea.Cmd
+		m.linuxdo, cmd = m.linuxdo.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// 把消息转发给当前激活的子模块处理
@@ -222,6 +241,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.ports, cmd = m.ports.Update(msg)
 		cmds = append(cmds, cmd)
+	case ui.TabLinuxDo:
+		var cmd tea.Cmd
+		m.linuxdo, cmd = m.linuxdo.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -247,6 +270,8 @@ func (m model) View() tea.View {
 		content = m.sys.View()
 	case ui.TabPorts:
 		content = m.ports.View()
+	case ui.TabLinuxDo:
+		content = m.linuxdo.View()
 	}
 
 	// 帮助面板覆盖在主内容上
@@ -314,6 +339,7 @@ func main() {
 		log:     &log.Model{},
 		sys:     &system.Model{},
 		ports:   &ports.Model{},
+		linuxdo: &linuxdo.Model{},
 	}
 	p3 := tea.NewProgram(m)
 	if _, err := p3.Run(); err != nil {
