@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -30,6 +31,9 @@ import (
 	"cava_go/internal/weather"
 )
 
+// splashTickMsg 闪屏定时器消息
+type splashTickMsg struct{}
+
 // model 整个应用的顶层状态模型
 // Bubbletea 的核心：Model(数据) → Update(更新) → View(渲染)
 type model struct {
@@ -39,6 +43,7 @@ type model struct {
 	appCfg      ui.AppConfig   // 应用持久化配置
 	cfgSaved    bool           // 配置是否已保存（用于显示提示）
 	helpOverlay bool           // 帮助面板是否展开
+	splashDone  bool           // 闪屏是否已结束
 	git         *git.Model     // Git 可视化子模块
 	log         *log.Model     // 日志查看器子模块
 	weather     *weather.Model // 天气面板子模块
@@ -58,6 +63,7 @@ func (m model) Init() tea.Cmd {
 	m.weather.SetRecent(m.appCfg.RecentCities)
 
 	return tea.Batch(
+		tea.Tick(5*time.Second, func(time.Time) tea.Msg { return splashTickMsg{} }),
 		m.git.Init(m.appCfg.DefaultRepo),
 		m.log.Init(m.appCfg.LastLogPath),
 		m.weather.Init(m.appCfg.DefaultCity),
@@ -117,7 +123,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.linuxdo.UpdateSize(msg.Width, msg.Height)
 		return m, nil
 
+	case splashTickMsg:
+		// 闪屏定时器到期，进入主界面
+		m.splashDone = true
+		return m, nil
+
 	case tea.KeyPressMsg:
+		// 闪屏期间任意按键跳过
+		if !m.splashDone {
+			m.splashDone = true
+			return m, nil
+		}
 		// 帮助面板显示时，只响应 ? 或 Esc 关闭，其他按键全部拦截
 		if m.helpOverlay {
 			if msg.String() == "?" || msg.String() == "esc" {
@@ -129,7 +145,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+q", "ctrl+c":
 			return m, tea.Quit
-		// ctrl+r 手动触发窗口大小检测 + 透传给当前模块（如 log 模块用它刷新）
+		// ctrl+r 手动触发窗口大小检测 + 透传给当前模块
 		case "ctrl+r":
 			cmds = append(cmds, func() tea.Msg { return tea.RequestWindowSize() })
 		// ctrl+s 保存当前配置
@@ -140,7 +156,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cfgSaved = true
 			}
 			return m, nil
-		// ? 切换帮助面板（排除输入框活跃状态）
+		// ? 切换帮助面板
 		case "?":
 			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() {
 				// 输入框活跃时，? 透传给模块
@@ -253,6 +269,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View 根据当前状态渲染整个界面
 // 布局：Tab 栏(顶部) + 模块内容(中间) + 状态栏(底部 2 行)
 func (m model) View() tea.View {
+	// 闪屏期间只渲染闪屏画面
+	if !m.splashDone {
+		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.0", 7))
+		v.AltScreen = true
+		return v
+	}
+
 	tabBar := ui.RenderTabBar(m.state, m.width)
 
 	// 根据当前 Tab 渲染对应模块
