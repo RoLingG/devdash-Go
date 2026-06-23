@@ -71,6 +71,26 @@ type PostStreamMsg struct {
 	Err       error
 }
 
+// SearchResult 搜索结果条目
+type SearchResult struct {
+	TopicID    int
+	Title      string
+	Blurb      string // 匹配片段
+	Username   string
+	PostsCount int
+	ReplyCount int
+	Tags       []string
+}
+
+// SearchMsg 搜索结果消息
+type SearchMsg struct {
+	Results []SearchResult
+	Query   string
+	Page    int  // 当前页码
+	More    bool // 是否有更多结果
+	Err     error
+}
+
 var httpClient = &http.Client{
 	Timeout: 15 * time.Second,
 	Transport: &http.Transport{
@@ -298,6 +318,80 @@ func FetchPostStreamCmd(topicID int, postIDs []int, cookie, userAgent string) te
 	}
 }
 
+// FetchSearchCmd 全站搜索
+func FetchSearchCmd(query, cookie, userAgent string, page int) tea.Cmd {
+	return func() tea.Msg {
+		searchURL := fmt.Sprintf("%s/search.json?q=%s&page=%d", baseURL, url.QueryEscape(query), page)
+		data, err := doGet(searchURL, cookie, userAgent)
+		if err != nil {
+			return SearchMsg{Query: query, Page: page, Err: err}
+		}
+		var resp struct {
+			Topics []struct {
+				ID         int    `json:"id"`
+				Title      string `json:"title"`
+				PostsCount int    `json:"posts_count"`
+				ReplyCount int    `json:"reply_count"`
+				Tags       []struct {
+					Name string `json:"name"`
+				} `json:"tags"`
+			} `json:"topics"`
+			Posts []struct {
+				TopicID  int    `json:"topic_id"`
+				Username string `json:"username"`
+				Blurb    string `json:"blurb"`
+			} `json:"posts"`
+			GroupedSearchResult struct {
+				MoreFullPageResults bool `json:"more_full_page_results"`
+			} `json:"grouped_search_result"`
+		}
+		if err := json.Unmarshal(data, &resp); err != nil {
+			return SearchMsg{Query: query, Page: page, Err: err}
+		}
+
+		// topics 和 posts 按索引一一对应，保留 API 相关性排序
+		pLen := len(resp.Posts)
+		tLen := len(resp.Topics)
+		cap := pLen
+		if tLen > cap {
+			cap = tLen
+		}
+		results := make([]SearchResult, 0, cap)
+
+		for i := 0; i < pLen || i < tLen; i++ {
+			var r SearchResult
+			if i < tLen {
+				t := resp.Topics[i]
+				r.TopicID = t.ID
+				r.Title = t.Title
+				r.PostsCount = t.PostsCount
+				r.ReplyCount = t.ReplyCount
+				if len(t.Tags) > 0 {
+					r.Tags = make([]string, 0, len(t.Tags))
+					for _, tag := range t.Tags {
+						if tag.Name != "" {
+							r.Tags = append(r.Tags, tag.Name)
+						}
+					}
+				}
+			}
+			if i < pLen {
+				p := resp.Posts[i]
+				blurb := tagRe.ReplaceAllString(p.Blurb, "")
+				blurb = strings.ReplaceAll(blurb, "\n", " ")
+				r.Blurb = strings.TrimSpace(blurb)
+				r.Username = p.Username
+				// posts 可能比 topics 多，用 topic_id 补充
+				if r.TopicID == 0 {
+					r.TopicID = p.TopicID
+				}
+			}
+			results = append(results, r)
+		}
+		return SearchMsg{Results: results, Query: query, Page: page, More: resp.GroupedSearchResult.MoreFullPageResults}
+	}
+}
+
 var (
 	tagRe   = regexp.MustCompile(`<[^>]*>`)
 	spaceRe = regexp.MustCompile(`[ \t]+`)
@@ -311,6 +405,7 @@ func HTMLToText(html string) string {
 	s = strings.ReplaceAll(s, "<br>", "\n")
 	s = strings.ReplaceAll(s, "<br/>", "\n")
 	s = strings.ReplaceAll(s, "<br />", "\n")
+	s = strings.ReplaceAll(s, "<p>", "\n") // p 开标签视为段落分隔
 	s = strings.ReplaceAll(s, "</p>", "\n")
 	s = strings.ReplaceAll(s, "</div>", "\n")
 	s = strings.ReplaceAll(s, "</li>", "\n")

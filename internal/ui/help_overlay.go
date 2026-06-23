@@ -65,7 +65,7 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 		},
 		TabLinuxDo: {
 			{"↑/↓", "scroll"}, {"^ctrl+↑/↓", "scroll ±10"}, {"Home/End", "first/last"}, {"enter", "open topic"},
-			{"/", "set cookie"}, {"ctrl+r", "refresh"},
+			{"/", "set cookie"}, {"ctrl+f", "search"}, {"ctrl+r", "refresh"},
 			{"ctrl+u", "clear cookie"}, {"?", "toggle help"}, {"Esc", "back/close"},
 			{"1-7", "switch tab"}, {"ctrl+q", "quit"},
 		},

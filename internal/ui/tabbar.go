@@ -78,7 +78,7 @@ func RenderStatusBar(active TabState, width int) string {
 
 	case TabLinuxDo:
 		line1 := helpLine([]string{"↑/↓ Scroll", "^↑/↓ ±10", "Enter Open", "Esc Back"}, width, sep)
-		line2 := helpLine([]string{"1-7 Tab", "^Q Quit", "/ Cookie", "^R Refresh"}, width, sep)
+		line2 := helpLine([]string{"1-7 Tab", "^Q Quit", "/ Cookie", "^F Search", "^R Refresh"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""

@@ -222,7 +222,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg:
+	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg, linuxdo.PostStreamMsg, linuxdo.SearchMsg:
 		var cmd tea.Cmd
 		m.linuxdo, cmd = m.linuxdo.Update(msg)
 		if cmd != nil {

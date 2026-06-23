@@ -19,6 +19,7 @@ const (
 	viewCategories viewMode = iota // 分类列表
 	viewTopics                     // 帖子列表
 	viewPosts                      // 帖子回复
+	viewSearch                     // 搜索结果
 )
 
 // inputTarget 输入目标
@@ -27,6 +28,7 @@ type inputTarget int
 const (
 	inputCookie    inputTarget = iota // 正在输入 Cookie
 	inputUserAgent                    // 正在输入 User-Agent
+	inputSearch                       // 正在输入搜索关键词
 )
 
 // Model Linux DO 模块状态
@@ -65,6 +67,17 @@ type Model struct {
 	postScroll        int
 	postLoading       bool
 	postErr           error
+
+	// 搜索
+	searchResults     []SearchResult
+	searchCursor      int
+	searchQuery       string
+	searchLoading     bool
+	searchErr         error
+	searchPrevMode    viewMode // Esc 时返回的视图
+	searchPage        int      // 当前已加载页码
+	searchMore        bool     // 是否有更多结果
+	searchLoadingMore bool     // 正在加载下一页
 
 	// 输入框
 	input       component.InputModel
@@ -168,6 +181,36 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.postStream = nil
 		m.postStreamLoading = false
 		return m, nil
+
+	case SearchMsg:
+		m.searchLoading = false
+		m.searchLoadingMore = false
+		if msg.Err != nil {
+			m.searchErr = msg.Err
+		} else {
+			if msg.Page <= 1 {
+				// 首页：替换结果
+				m.searchResults = msg.Results
+				m.searchCursor = 0
+				m.searchPage = 1
+			} else {
+				// 后续页：追加结果，按 TopicID 去重
+				existing := make(map[int]bool, len(m.searchResults))
+				for _, r := range m.searchResults {
+					existing[r.TopicID] = true
+				}
+				for _, r := range msg.Results {
+					if !existing[r.TopicID] {
+						m.searchResults = append(m.searchResults, r)
+						existing[r.TopicID] = true
+					}
+				}
+				m.searchPage = msg.Page
+			}
+			m.searchMore = msg.More
+			m.searchErr = nil
+		}
+		return m, nil
 	}
 
 	// 输入框活跃时，所有按键交给 input 处理
@@ -177,6 +220,20 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			cmd := m.input.Update(msg, func(val string) func() tea.Msg {
 				if val == "" {
 					return nil
+				}
+				if m.inputTarget == inputSearch {
+					// 搜索输入完成
+					m.searchPrevMode = m.mode
+					m.mode = viewSearch
+					m.searchLoading = true
+					m.searchErr = nil
+					m.searchResults = nil
+					m.searchCursor = 0
+					m.searchQuery = val
+					m.searchPage = 0
+					m.searchMore = false
+					m.searchLoadingMore = false
+					return FetchSearchCmd(val, m.cookie, m.userAgent, 1)
 				}
 				if m.inputTarget == inputCookie {
 					// Cookie 输入完成，接着提示 User-Agent
@@ -211,6 +268,14 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
+	case "ctrl+f":
+		if m.cookie == "" {
+			return m, nil
+		}
+		m.inputTarget = inputSearch
+		m.input.Prompt = "Search:"
+		m.input.Open("")
+		return m, nil
 	case "/":
 		m.inputTarget = inputCookie
 		m.input.Prompt = "Cookie:"
@@ -272,6 +337,19 @@ func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
 		if m.postScroll < 0 {
 			m.postScroll = 0
 		}
+	case viewSearch:
+		m.searchCursor += delta
+		if m.searchCursor < 0 {
+			m.searchCursor = 0
+		}
+		if m.searchCursor >= len(m.searchResults) {
+			m.searchCursor = len(m.searchResults) - 1
+			// 无限滚动：到底且有更多结果，加载下一页
+			if !m.searchLoadingMore && m.searchMore {
+				m.searchLoadingMore = true
+				return m, FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, m.searchPage+1)
+			}
+		}
 	}
 	return m, nil
 }
@@ -300,6 +378,14 @@ func (m *Model) setCursor(pos int) {
 			m.postScroll = 0
 		}
 		// 无上限，View 里会 clamp
+	case viewSearch:
+		m.searchCursor = pos
+		if m.searchCursor >= len(m.searchResults) {
+			m.searchCursor = len(m.searchResults) - 1
+		}
+		if m.searchCursor < 0 {
+			m.searchCursor = 0
+		}
 	}
 }
 
@@ -335,6 +421,16 @@ func (m *Model) enterSelected() (*Model, tea.Cmd) {
 		m.postLoading = true
 		m.postErr = nil
 		return m, FetchTopicDetailCmd(topic.ID, m.cookie, m.userAgent)
+	case viewSearch:
+		if len(m.searchResults) == 0 {
+			return m, nil
+		}
+		result := m.searchResults[m.searchCursor]
+		m.mode = viewPosts
+		m.postTopicID = result.TopicID
+		m.postLoading = true
+		m.postErr = nil
+		return m, FetchTopicDetailCmd(result.TopicID, m.cookie, m.userAgent)
 	}
 	return m, nil
 }
@@ -354,6 +450,11 @@ func (m *Model) goBack() (*Model, tea.Cmd) {
 		m.topics = nil
 		m.topTitle = ""
 		m.topFullPage = false
+	case viewSearch:
+		m.mode = m.searchPrevMode
+		m.searchResults = nil
+		m.searchQuery = ""
+		m.searchErr = nil
 	}
 	return m, nil
 }
@@ -384,6 +485,15 @@ func (m *Model) refresh() (*Model, tea.Cmd) {
 			m.postErr = nil
 			return m, FetchTopicDetailCmd(m.postTopicID, m.cookie, m.userAgent)
 		}
+	case viewSearch:
+		if m.searchQuery != "" {
+			m.searchLoading = true
+			m.searchErr = nil
+			m.searchPage = 0
+			m.searchMore = false
+			m.searchLoadingMore = false
+			return m, FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, 1)
+		}
 	}
 	return m, nil
 }
@@ -397,8 +507,11 @@ func (m *Model) View() string {
 	// 输入框
 	if m.input.Active {
 		title := "Set Cookie"
-		if m.inputTarget == inputUserAgent {
+		switch m.inputTarget {
+		case inputUserAgent:
 			title = "Set User-Agent"
+		case inputSearch:
+			title = "Search"
 		}
 		return ui.RenderInputCard(ui.InputCardOpts{
 			Title:       title,
@@ -425,6 +538,8 @@ func (m *Model) View() string {
 		return m.viewTopics(cardWidth)
 	case viewPosts:
 		return m.viewPosts(cardWidth)
+	case viewSearch:
+		return m.viewSearch(cardWidth)
 	}
 	return ""
 }
@@ -613,4 +728,100 @@ func (m *Model) viewPosts(cardWidth int) string {
 		title = fmt.Sprintf("%s (%d/%d posts)", m.postTitle, len(m.posts), m.totalPosts)
 	}
 	return ui.Card(title, visible, ui.ColAccent, cardWidth)
+}
+
+func (m *Model) viewSearch(cardWidth int) string {
+	title := fmt.Sprintf("Search: %s", m.searchQuery)
+
+	if m.searchLoading {
+		return ui.Card(title, lipgloss.NewStyle().Foreground(ui.ColAccent).Render("🔍 Searching..."), ui.ColAccent, cardWidth)
+	}
+	if m.searchErr != nil {
+		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.searchErr.Error()) + "\n"
+		errContent += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("'R' retry, Esc back")
+		return ui.Card(title, errContent, ui.ColRed, cardWidth)
+	}
+	if len(m.searchResults) == 0 {
+		return ui.Card(title, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  No results"), ui.ColMuted, cardWidth)
+	}
+
+	viewH := (m.height - 7) / 3
+	if viewH < 1 {
+		viewH = 1
+	}
+
+	total := len(m.searchResults)
+	start := m.searchCursor - viewH/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + viewH
+	if end > total {
+		end = total
+		start = end - viewH
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	var sb strings.Builder
+	for i := start; i < end; i++ {
+		r := m.searchResults[i]
+		prefix := "  "
+		if i == m.searchCursor {
+			prefix = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸  ")
+		}
+
+		// 标题
+		titleText := r.Title
+		if titleText == "" {
+			titleText = "(no title)"
+		}
+		// margin 24 = 边框+padding(4) + 前缀(3) + meta中emoji宽度(💬👀各2列) + 余量
+		maxTitleW := cardWidth - 24
+		if maxTitleW < 10 {
+			maxTitleW = 10
+		}
+		if lipgloss.Width(titleText) > maxTitleW {
+			titleText = ui.Truncate(titleText, maxTitleW-1) + "…"
+		}
+		renderedTitle := lipgloss.NewStyle().Foreground(ui.ColText).Render(titleText)
+
+		// 元信息
+		meta := lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
+			fmt.Sprintf("  💬 %d  🔁 %d", r.PostsCount, r.ReplyCount))
+
+		sb.WriteString(prefix + renderedTitle + meta + "\n")
+
+		// tags 标签（显示在标题行下方）
+		tagsStr := "    🏷️ " + strings.Join(r.Tags, " ")
+		maxTagsW := cardWidth - 8
+		if maxTagsW > 0 && lipgloss.Width(tagsStr) > maxTagsW {
+			tagsStr = ui.Truncate(tagsStr, maxTagsW)
+		}
+		sb.WriteString(lipgloss.NewStyle().Foreground(ui.ColMuted).Render(tagsStr) + "\n")
+
+		// blurb 摘要
+		if r.Blurb != "" {
+			blurb := strings.ReplaceAll(r.Blurb, "\n", " ")
+			maxBlurbW := cardWidth - 12
+			if maxBlurbW < 10 {
+				maxBlurbW = 10
+			}
+			if lipgloss.Width(blurb) > maxBlurbW {
+				blurb = ui.Truncate(blurb, maxBlurbW)
+			}
+			sb.WriteString("    " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(blurb) + "\n")
+		}
+	}
+
+	cardTitle := fmt.Sprintf("%s (%d)", title, total)
+	if m.searchMore {
+		cardTitle += "+"
+	}
+	content := strings.TrimRight(sb.String(), "\n")
+	if m.searchLoadingMore {
+		content += "\n\n    " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render("🔍 Loading more...")
+	}
+	return ui.Card(cardTitle, content, ui.ColAccent, cardWidth)
 }
