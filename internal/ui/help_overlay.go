@@ -29,7 +29,7 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 		TabGit: {
 			{"↑/↓", "scroll commits"}, {"Home/End", "first/last"}, {"/", "change repo"}, {"ctrl+r", "refresh"},
 			{"?", "toggle help"}, {"Esc", "close"}, {"1-7", "switch tab"},
-			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
+			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabLog: {
 			{"↑↓", "cursor in page"}, {"Home/End", "first/last"}, {"[ ]", "prev/next page"},
@@ -37,37 +37,37 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"/", "open path"}, {"type", "filter"}, {"ctrl+l", "level filter"},
 			{"ctrl+u", "clear filter"}, {"ctrl+f", "follow mode"},
 			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"Esc", "close"}, {"1-7", "switch tab"},
-			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
+			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabWeather: {
 			{"↑/↓", "scroll content"}, {"Home/End", "first/last"}, {"/", "change city"}, {"ctrl+r", "refresh"},
 			{"?", "toggle help"}, {"Esc", "close"}, {"1-7", "switch tab"},
-			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
+			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabConfig: {
 			{"↑/↓", "move cursor"}, {"Home/End", "first/last"}, {"enter", "toggle node"}, {"/", "open file"},
 			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"ctrl+n/b", "next/prev match"},
 			{"ctrl+u", "clear search"}, {"ctrl+e", "expand all"}, {"ctrl+w", "collapse all"},
 			{"?", "toggle help"}, {"Esc", "close"}, {"1-7", "switch tab"},
-			{"ctrl+s", "save config"}, {"ctrl+q", "quit"},
+			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabSystem: {
 			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"tab", "switch view"}, {"/", "filter process"},
 			{"ctrl+r", "refresh"}, {"ctrl+u", "clear filter"},
 			{"?", "toggle help"}, {"Esc", "close"}, {"1-7", "switch tab"},
-			{"ctrl+q", "quit"},
+			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabPorts: {
 			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"/", "add port"},
 			{"ctrl+r", "rescan"},
 			{"?", "toggle help"}, {"Esc", "close"}, {"1-7", "switch tab"},
-			{"ctrl+q", "quit"},
+			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabLinuxDo: {
 			{"↑/↓", "scroll"}, {"^ctrl+↑/↓", "scroll ±10"}, {"Home/End", "first/last"}, {"enter", "open topic"},
 			{"/", "set cookie"}, {"ctrl+f", "search"}, {"ctrl+r", "refresh"},
 			{"ctrl+u", "clear cookie"}, {"?", "toggle help"}, {"Esc", "back/close"},
-			{"1-7", "switch tab"}, {"ctrl+q", "quit"},
+			{"1-7", "switch tab"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 	}
 

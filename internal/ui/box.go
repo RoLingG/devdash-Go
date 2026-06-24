@@ -9,7 +9,7 @@ import (
 
 // Box 用边框包裹内容并加标题
 func Box(title, content string, width int) string {
-	header := StyleTitle.Render(title)
+	header := StyleTitle().Render(title)
 	maxW := width - 4
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
@@ -17,7 +17,7 @@ func Box(title, content string, width int) string {
 			lines[i] = ForceTruncate(line, maxW)
 		}
 	}
-	return StyleBox.Width(maxW).Render(header + "\n" + strings.Join(lines, "\n"))
+	return StyleBox().Width(maxW).Render(header + "\n" + strings.Join(lines, "\n"))
 }
 
 // Card 创建一个带边框的卡片

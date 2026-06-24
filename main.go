@@ -8,7 +8,7 @@
 //   [4] 配置浏览   — JSON/YAML 折叠展开、语法高亮
 //   [5] 系统监控   — CPU/内存/磁盘、进程列表
 //   [6] 端口扫描   — 常用端口状态检测
-//   [7] LinuxDo   — linux.do 论坛浏览（个人模块）
+//   [7] LinuxDo   — linux.do 论坛浏览
 // ============================================================================
 
 package main
@@ -51,6 +51,12 @@ type model struct {
 	sys         *system.Model  // 系统监控子模块
 	ports       *ports.Model   // 端口扫描子模块
 	linuxdo     *linuxdo.Model // LinuxDo 论坛子模块
+}
+
+// anyInputActive 检查是否有模块的输入框正在接收输入
+func (m model) anyInputActive() bool {
+	return m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() ||
+		m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive()
 }
 
 // Init 应用启动时执行的初始化命令
@@ -156,17 +162,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cfgSaved = true
 			}
 			return m, nil
+		// ctrl+t 切换主题
+		case "ctrl+t":
+			if ui.IsLightTheme() {
+				m.appCfg.Theme = "dark"
+			} else {
+				m.appCfg.Theme = "light"
+			}
+			ui.SetThemeByName(m.appCfg.Theme)
+			ui.SaveConfig(m.appCfg)
+			return m, nil
 		// ? 切换帮助面板
 		case "?":
-			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() {
+			if m.anyInputActive() {
 				// 输入框活跃时，? 透传给模块
 				break
 			}
 			m.helpOverlay = true
 			return m, nil
-		// 数字键切换 Tab（全局快捷键），输入框活跃时透传给当前模块
+		// 数字键切换 Tab，输入框活跃时透传给当前模块
 		case "1", "2", "3", "4", "5", "6", "7":
-			if m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() || m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() {
+			if m.anyInputActive() {
 				break // 透传给模块处理
 			}
 			switch msg.String() {
@@ -353,6 +369,8 @@ func main() {
 	}
 
 	// 启动主界面
+	ui.SetThemeByName(appCfg.Theme)
+
 	m := model{
 		state:   ui.TabGit,
 		appCfg:  appCfg,

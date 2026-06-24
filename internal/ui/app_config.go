@@ -31,6 +31,7 @@ type AppConfig struct {
 	RecentCities      []string `json:"recent_cities"`
 	LinuxDoCookie     string   `json:"linuxdo_cookie,omitempty"`
 	LinuxDoUserAgent  string   `json:"linuxdo_user_agent,omitempty"`
+	Theme             string   `json:"theme,omitempty"`
 }
 
 // configFileName 配置文件名

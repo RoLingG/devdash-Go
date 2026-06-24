@@ -328,7 +328,7 @@ func (m *Model) View() string {
 	for i := start; i < end; i++ {
 		line := m.lines[i]
 		if i == m.cursor {
-			line = lipgloss.NewStyle().Background(lipgloss.Color("237")).Render(" " + line + " ")
+			line = lipgloss.NewStyle().Background(ui.ColBgMid).Render(" " + line + " ")
 		}
 		sb.WriteString("  " + line)
 		sb.WriteString("\n")

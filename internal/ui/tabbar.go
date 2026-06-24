@@ -12,15 +12,15 @@ func RenderTabBar(active TabState, width int) string {
 	var parts []string
 	for i, label := range labels {
 		if TabState(i) == active {
-			parts = append(parts, styleTabActive.Render(label))
+			parts = append(parts, StyleTabActive().Render(label))
 		} else {
-			parts = append(parts, styleTabInactive.Render(label))
+			parts = append(parts, StyleTabInactive().Render(label))
 		}
 	}
 	bar := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
 	gap := width - lipgloss.Width(bar)
 	if gap > 0 {
-		bar += lipgloss.NewStyle().Background(lipgloss.Color("237")).Render(strings.Repeat(" ", gap))
+		bar += lipgloss.NewStyle().Background(ColBgMid).Render(strings.Repeat(" ", gap))
 	}
 	return bar
 }
@@ -33,10 +33,10 @@ func helpLine(parts []string, width int, sep string) string {
 		parts[i] = PadRight(p, helpColW)
 	}
 	h := " " + strings.Join(parts, sep) + " "
-	styled := StyleHelp.Render(h)
+	styled := StyleHelpBar().Render(h)
 	gap := width - lipgloss.Width(styled)
 	if gap > 0 {
-		styled += StyleHelp.Render(strings.Repeat(" ", gap))
+		styled += StyleHelpBar().Render(strings.Repeat(" ", gap))
 	}
 	return styled
 }
