@@ -86,6 +86,7 @@ const (
 	TabSystem
 	TabPorts
 	TabLinuxDo
+	TabRoute
 )
 
 // StyleTabActive 激活状态下的 Tab 样式

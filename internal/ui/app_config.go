@@ -10,28 +10,45 @@ import (
 
 // CfgChangedMsg 配置项变更消息，各模块在路径/城市变更时发送
 type CfgChangedMsg struct {
-	Key   string // "city" / "repo" / "logPath" / "configPath"
+	Key   string // "city" / "repo" / "logPath" / "configPath" / "savedRoutes"
 	Value string
+	Data  any // 复杂类型数据（如 []RouteConfig），优先级高于 Value
 }
 
-// UpdateCfgCmd 返回一个发送 CfgChangedMsg 的 Cmd
+// UpdateCfgCmd 返回一个发送 CfgChangedMsg 的 Cmd（字符串值）
 func UpdateCfgCmd(key, value string) tea.Cmd {
 	return func() tea.Msg { return CfgChangedMsg{Key: key, Value: value} }
 }
 
+// UpdateCfgDataCmd 返回一个发送 CfgChangedMsg 的 Cmd（复杂类型数据）
+func UpdateCfgDataCmd(key string, data any) tea.Cmd {
+	return func() tea.Msg { return CfgChangedMsg{Key: key, Data: data} }
+}
+
+// RouteConfig 保存的路由配置条目
+type RouteConfig struct {
+	Dest      string `json:"dest"`       // 目标地址（如 "10.0.0.0"）
+	PrefixLen uint8  `json:"prefix_len"` // 前缀长度（如 8）
+	NextHop   string `json:"next_hop"`   // 网关（如 "10.18.1.1"）
+	Metric    uint32 `json:"metric"`     // 跃点数
+	IfIndex   uint32 `json:"if_index"`   // 接口索引
+	IfName    string `json:"if_name"`    // 接口名称（仅展示用）
+}
+
 // AppConfig 应用持久化配置
 type AppConfig struct {
-	DefaultCity       string   `json:"default_city"`
-	DefaultRepo       string   `json:"default_repo"`
-	LastLogPath       string   `json:"last_log_path"`
-	LastConfigPath    string   `json:"last_config_path"`
-	RecentRepos       []string `json:"recent_repos"`
-	RecentLogFiles    []string `json:"recent_log_files"`
-	RecentConfigFiles []string `json:"recent_config_files"`
-	RecentCities      []string `json:"recent_cities"`
-	LinuxDoCookie     string   `json:"linuxdo_cookie,omitempty"`
-	LinuxDoUserAgent  string   `json:"linuxdo_user_agent,omitempty"`
-	Theme             string   `json:"theme,omitempty"`
+	DefaultCity       string        `json:"default_city"`
+	DefaultRepo       string        `json:"default_repo"`
+	LastLogPath       string        `json:"last_log_path"`
+	LastConfigPath    string        `json:"last_config_path"`
+	RecentRepos       []string      `json:"recent_repos"`
+	RecentLogFiles    []string      `json:"recent_log_files"`
+	RecentConfigFiles []string      `json:"recent_config_files"`
+	RecentCities      []string      `json:"recent_cities"`
+	LinuxDoCookie     string        `json:"linuxdo_cookie,omitempty"`
+	LinuxDoUserAgent  string        `json:"linuxdo_user_agent,omitempty"`
+	Theme             string        `json:"theme,omitempty"`
+	SavedRoutes       []RouteConfig `json:"saved_routes,omitempty"`
 }
 
 // configFileName 配置文件名

@@ -9,6 +9,7 @@
 //   [5] 系统监控   — CPU/内存/磁盘、进程列表
 //   [6] 端口扫描   — 常用端口状态检测
 //   [7] LinuxDo   — linux.do 论坛浏览
+//   [8] Route     — 路由管理（静态路由增删查）
 // ============================================================================
 
 package main
@@ -26,6 +27,7 @@ import (
 	"cava_go/internal/linuxdo"
 	"cava_go/internal/log"
 	"cava_go/internal/ports"
+	"cava_go/internal/route"
 	"cava_go/internal/system"
 	"cava_go/internal/ui"
 	"cava_go/internal/weather"
@@ -40,8 +42,8 @@ type model struct {
 	state       ui.TabState    // 当前激活的 Tab
 	width       int            // 终端宽度
 	height      int            // 终端高度
-	appCfg      ui.AppConfig   // 应用持久化配置
-	cfgSaved    bool           // 配置是否已保存（用于显示提示）
+	appCfg      *ui.AppConfig  // 应用持久化配置（指针，与 route 模块共享）
+	cfgSaved    bool           // 配置是否已保存
 	helpOverlay bool           // 帮助面板是否展开
 	splashDone  bool           // 闪屏是否已结束
 	git         *git.Model     // Git 可视化子模块
@@ -51,12 +53,14 @@ type model struct {
 	sys         *system.Model  // 系统监控子模块
 	ports       *ports.Model   // 端口扫描子模块
 	linuxdo     *linuxdo.Model // LinuxDo 论坛子模块
+	routeMod    *route.Model   // 路由管理子模块
 }
 
 // anyInputActive 检查是否有模块的输入框正在接收输入
 func (m model) anyInputActive() bool {
 	return m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() ||
-		m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive()
+		m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() ||
+		m.routeMod.InputActive()
 }
 
 // Init 应用启动时执行的初始化命令
@@ -67,6 +71,7 @@ func (m model) Init() tea.Cmd {
 	m.log.SetRecent(m.appCfg.RecentLogFiles)
 	m.config.SetRecent(m.appCfg.RecentConfigFiles)
 	m.weather.SetRecent(m.appCfg.RecentCities)
+	m.routeMod.SetSavedRoutes(m.appCfg.SavedRoutes)
 
 	return tea.Batch(
 		tea.Tick(5*time.Second, func(time.Time) tea.Msg { return splashTickMsg{} }),
@@ -77,6 +82,7 @@ func (m model) Init() tea.Cmd {
 		m.sys.Init(),
 		m.ports.Init(),
 		m.linuxdo.Init(m.appCfg.LinuxDoCookie, m.appCfg.LinuxDoUserAgent),
+		m.routeMod.Init(),
 	)
 }
 
@@ -111,7 +117,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "linuxdoUserAgent":
 			m.appCfg.LinuxDoUserAgent = msg.Value
 			m.linuxdo.SetUserAgent(msg.Value)
+		case "savedRoutes":
+			if routes, ok := msg.Data.([]ui.RouteConfig); ok {
+				m.appCfg.SavedRoutes = routes
+				m.routeMod.SetSavedRoutes(routes)
+			}
 		}
+		ui.SaveConfig(*m.appCfg)
 		return m, nil
 	}
 
@@ -127,6 +139,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sys.UpdateSize(msg.Width, msg.Height)
 		m.ports.UpdateSize(msg.Width, msg.Height)
 		m.linuxdo.UpdateSize(msg.Width, msg.Height)
+		m.routeMod.UpdateSize(msg.Width, msg.Height) // [修复] 之前漏掉了 route 模块的尺寸同步
 		return m, nil
 
 	case splashTickMsg:
@@ -154,9 +167,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// ctrl+r 手动触发窗口大小检测 + 透传给当前模块
 		case "ctrl+r":
 			cmds = append(cmds, func() tea.Msg { return tea.RequestWindowSize() })
-		// ctrl+s 保存当前配置
+		// ctrl+s 保存当前配置（Route 模块内由模块自行处理保存路由）
 		case "ctrl+s":
-			if err := ui.SaveConfig(m.appCfg); err != nil {
+			if m.state == ui.TabRoute && !m.routeMod.InputActive() {
+				break // 透传给 Route 模块处理
+			}
+			if err := ui.SaveConfig(*m.appCfg); err != nil {
 				// 保存失败，可以通过状态提示（暂时忽略）
 			} else {
 				m.cfgSaved = true
@@ -170,7 +186,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.appCfg.Theme = "light"
 			}
 			ui.SetThemeByName(m.appCfg.Theme)
-			ui.SaveConfig(m.appCfg)
+			ui.SaveConfig(*m.appCfg)
 			return m, nil
 		// ? 切换帮助面板
 		case "?":
@@ -181,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.helpOverlay = true
 			return m, nil
 		// 数字键切换 Tab，输入框活跃时透传给当前模块
-		case "1", "2", "3", "4", "5", "6", "7":
+		case "1", "2", "3", "4", "5", "6", "7", "8":
 			if m.anyInputActive() {
 				break // 透传给模块处理
 			}
@@ -200,6 +216,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = ui.TabPorts
 			case "7":
 				m.state = ui.TabLinuxDo
+			case "8":
+				m.state = ui.TabRoute
 			}
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
 		}
@@ -244,6 +262,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case route.RoutesMsg, route.RouteActionMsg:
+		var cmd tea.Cmd
+		m.routeMod, cmd = m.routeMod.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// 把消息转发给当前激活的子模块处理
@@ -277,6 +301,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.linuxdo, cmd = m.linuxdo.Update(msg)
 		cmds = append(cmds, cmd)
+	case ui.TabRoute:
+		var cmd tea.Cmd
+		m.routeMod, cmd = m.routeMod.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -287,7 +315,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() tea.View {
 	// 闪屏期间只渲染闪屏画面
 	if !m.splashDone {
-		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.0", 7))
+		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.0", 8))
 		v.AltScreen = true
 		return v
 	}
@@ -311,6 +339,8 @@ func (m model) View() tea.View {
 		content = m.ports.View()
 	case ui.TabLinuxDo:
 		content = m.linuxdo.View()
+	case ui.TabRoute:
+		content = m.routeMod.View()
 	}
 
 	// 帮助面板覆盖在主内容上
@@ -372,15 +402,16 @@ func main() {
 	ui.SetThemeByName(appCfg.Theme)
 
 	m := model{
-		state:   ui.TabGit,
-		appCfg:  appCfg,
-		weather: &weather.Model{},
-		config:  &config.Model{},
-		git:     &git.Model{},
-		log:     &log.Model{},
-		sys:     &system.Model{},
-		ports:   &ports.Model{},
-		linuxdo: &linuxdo.Model{},
+		state:    ui.TabGit,
+		appCfg:   &appCfg,
+		weather:  &weather.Model{},
+		config:   &config.Model{},
+		git:      &git.Model{},
+		log:      &log.Model{},
+		sys:      &system.Model{},
+		ports:    &ports.Model{},
+		linuxdo:  &linuxdo.Model{},
+		routeMod: &route.Model{},
 	}
 	p3 := tea.NewProgram(m)
 	if _, err := p3.Run(); err != nil {
