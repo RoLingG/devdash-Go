@@ -83,7 +83,7 @@ func RenderStatusBar(active TabState, width int) string {
 
 	case TabRoute:
 		line1 := helpLine([]string{"↑/↓ Scroll", "Home/End", "^A Add Route", "^D Delete", "^S Save"}, width, sep)
-		line2 := helpLine([]string{"1-8 Tab", "^I Ifaces", "^R Refresh", "^L Load", "^Q Quit"}, width, sep)
+		line2 := helpLine([]string{"1-8 Tab", "Tab Ifaces", "^R Refresh", "^L Load", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""

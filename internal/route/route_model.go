@@ -3,6 +3,7 @@ package route
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"strings"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/sys/windows"
 )
 
 // ---- 消息类型 ----
@@ -19,10 +19,9 @@ import (
 type clearMsgMsg struct{}
 
 type RoutesMsg struct {
-	Routes    []RouteEntry
-	RawRoutes []windows.MibIpForwardRow2
-	Ifaces    []IfaceInfo
-	Err       error
+	Routes []RouteEntry
+	Ifaces []IfaceInfo
+	Err    error
 }
 
 type RouteActionMsg struct {
@@ -55,10 +54,9 @@ type Model struct {
 	loaded      bool
 	savedRoutes []ui.RouteConfig // 从配置加载的保存路由（只读，用于 ctrl+l 加载）
 	routes      []RouteEntry
-	rawRoutes   []windows.MibIpForwardRow2
 	ifaces      []IfaceInfo
 	cursor      int
-	scroll      int
+	scroll      int //当前视图窗口第一行在完整列表中的行号偏移
 	mode        viewMode
 	isAdmin     bool
 	msg         string // 状态提示
@@ -94,9 +92,8 @@ func (m *Model) loadRoutesCmd() tea.Cmd {
 		if err != nil {
 			return RoutesMsg{Err: err}
 		}
-		rawRoutes, _ := GetRawRoutes()
 		ifaces, _ := GetInterfaces()
-		return RoutesMsg{Routes: routes, RawRoutes: rawRoutes, Ifaces: ifaces}
+		return RoutesMsg{Routes: routes, Ifaces: ifaces}
 	}
 }
 
@@ -113,7 +110,6 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			return m, m.err(msg.Err)
 		}
 		m.routes = msg.Routes
-		m.rawRoutes = msg.RawRoutes
 		m.ifaces = msg.Ifaces
 		m.msg = ""
 		return m, nil
@@ -157,7 +153,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 		m.loading = true
 		return m, m.loadRoutesCmd()
 
-	case "ctrl+i":
+	case "tab":
 		if m.mode == viewRoutes {
 			m.mode = viewIfaces
 		} else {
@@ -352,7 +348,7 @@ func (m *Model) submitAdd() tea.Cmd {
 }
 
 func (m *Model) deleteSelected() tea.Cmd {
-	if m.cursor >= len(m.routes) || m.cursor >= len(m.rawRoutes) {
+	if m.cursor >= len(m.routes) {
 		return nil
 	}
 	route := m.routes[m.cursor]
@@ -363,9 +359,8 @@ func (m *Model) deleteSelected() tea.Cmd {
 		return m.err(fmt.Errorf("只能删除静态路由"))
 	}
 
-	raw := m.rawRoutes[m.cursor]
 	return func() tea.Msg {
-		err := DeleteRoute(&raw)
+		err := DeleteRoute(route.Dest, route.PrefixLen, route.NextHop, route.IfIndex)
 		return RouteActionMsg{OK: err == nil, Err: err, IsAdd: false}
 	}
 }
@@ -468,7 +463,11 @@ func (m *Model) View() string {
 }
 
 func (m *Model) viewRoutes(cardWidth int) string {
-	header := fmt.Sprintf("Routes (%d) [Read Only]", len(m.routes))
+	platform := "Win"
+	if runtime.GOOS == "darwin" {
+		platform = "Mac"
+	}
+	header := fmt.Sprintf("Routes (%d) [%s]", len(m.routes), platform)
 
 	viewH := (m.height - 7) / 2
 	if viewH < 1 {
@@ -551,31 +550,106 @@ func (m *Model) viewIfaces(cardWidth int) string {
 		contentH = 3
 	}
 
+	total := len(m.ifaces)
+	if total == 0 {
+		return ui.Card(header, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  No interfaces"), ui.ColAccent, cardWidth)
+	}
+
+	// 计算每个接口占几行（1行名称 + N行地址 + 1行MAC）
+	ifaceLines := make([]int, total)
+	for i, iface := range m.ifaces {
+		lines := 1 + len(iface.Addrs) // 名称行 + 地址行
+		if iface.MAC != "" {
+			lines++
+		}
+		ifaceLines[i] = lines
+	}
+
+	// 计算总行数和 cursor 所在接口的起始行
+	totalLines := 0
+	cursorLineStart := 0
+	for i := 0; i < total; i++ {
+		if i == m.cursor {
+			cursorLineStart = totalLines
+		}
+		totalLines += ifaceLines[i]
+	}
+
+	// 确保光标所在接口可见：调整 scroll
+	if cursorLineStart < m.scroll {
+		m.scroll = cursorLineStart
+	}
+	cursorLineEnd := cursorLineStart + ifaceLines[m.cursor] - 1
+	if cursorLineEnd >= m.scroll+contentH {
+		m.scroll = cursorLineEnd - contentH + 1
+	}
+	if m.scroll > totalLines-contentH {
+		m.scroll = totalLines - contentH
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+
+	// 从 scroll 位置开始渲染
 	var sb strings.Builder
 	renderedLines := 0
+	currentLine := 0
 	for i, iface := range m.ifaces {
 		if renderedLines >= contentH {
 			break
 		}
-		prefix := "  "
-		if i == m.cursor {
-			prefix = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸ ")
+
+		// 跳过 scroll 之前的行
+		if currentLine+ifaceLines[i] <= m.scroll {
+			currentLine += ifaceLines[i]
+			continue
 		}
 
-		nameStr := fmt.Sprintf("#%-3d %s", iface.Index, iface.Name)
-		sb.WriteString(prefix + lipgloss.NewStyle().Foreground(ui.ColText).Render(nameStr) + "\n")
-		renderedLines++
-
-		for _, addr := range iface.Addrs {
-			if renderedLines >= contentH {
-				break
+		// 名称行
+		if currentLine >= m.scroll && renderedLines < contentH {
+			prefix := "  "
+			if i == m.cursor {
+				prefix = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸ ")
 			}
-			sb.WriteString("      " + lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(addr) + "\n")
+			upStr := "up"
+			upColor := ui.ColGreen
+			if !iface.IsUp {
+				upStr = "down"
+				upColor = ui.ColMuted
+			}
+			nameStr := fmt.Sprintf("#%-3d %s", iface.Index, iface.Name)
+			infoStr := fmt.Sprintf("  mtu=%d", iface.MTU)
+			sb.WriteString(prefix +
+				lipgloss.NewStyle().Foreground(ui.ColText).Render(nameStr) +
+				lipgloss.NewStyle().Foreground(ui.ColMuted).Render(infoStr) +
+				"  " + lipgloss.NewStyle().Foreground(upColor).Render(upStr) +
+				"\n")
 			renderedLines++
 		}
-		if iface.MAC != "" && renderedLines < contentH {
-			sb.WriteString("      " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(iface.MAC) + "\n")
-			renderedLines++
+		currentLine++
+
+		// 地址行
+		for _, addr := range iface.Addrs {
+			if currentLine >= m.scroll && renderedLines < contentH {
+				var parts string
+				if addr.IsIPv6 {
+					parts = fmt.Sprintf("%-40s %s", addr.IP, addr.Netmask)
+					sb.WriteString("      " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(parts) + "\n")
+				} else {
+					parts = fmt.Sprintf("%-15s  mask %-15s  bcast %s", addr.IP, addr.Netmask, addr.Broadcast)
+					sb.WriteString("      " + lipgloss.NewStyle().Foreground(ui.ColSecondary).Render(parts) + "\n")
+				}
+				renderedLines++
+			}
+			currentLine++
+		}
+		// MAC
+		if iface.MAC != "" {
+			if currentLine >= m.scroll && renderedLines < contentH {
+				sb.WriteString("      " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render("mac "+iface.MAC) + "\n")
+				renderedLines++
+			}
+			currentLine++
 		}
 	}
 

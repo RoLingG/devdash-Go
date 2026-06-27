@@ -71,8 +71,8 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"1-8", "switch tab"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabRoute: {
-			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"ctrl+a", "add route"},
-			{"ctrl+d", "delete route"}, {"ctrl+i", "interfaces"}, {"ctrl+r", "refresh"},
+			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"Tab", "interfaces"},
+			{"ctrl+d", "delete route"}, {"ctrl+a", "add route"}, {"ctrl+r", "refresh"},
 			{"ctrl+s", "save routes"}, {"ctrl+l", "load routes"},
 			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
 			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
