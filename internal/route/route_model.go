@@ -342,7 +342,10 @@ func (m *Model) submitAdd() tea.Cmd {
 	m.addOverlay = false
 
 	return func() tea.Msg {
-		err := AddRoute(dest.To4(), uint8(prefixLen), gw.To4(), ifIdx, metric)
+		err := AddRoute(AddRouteParams{
+			Dest: dest.To4(), PrefixLen: uint8(prefixLen),
+			Gateway: gw.To4(), IfIndex: ifIdx, Metric: metric,
+		})
 		return RouteActionMsg{OK: err == nil, Err: err, IsAdd: true}
 	}
 }
@@ -360,7 +363,10 @@ func (m *Model) deleteSelected() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		err := DeleteRoute(route.Dest, route.PrefixLen, route.NextHop, route.IfIndex)
+		err := DeleteRoute(DeleteRouteParams{
+			Dest: route.Dest, PrefixLen: route.PrefixLen,
+			NextHop: route.NextHop, IfIndex: route.IfIndex,
+		})
 		return RouteActionMsg{OK: err == nil, Err: err, IsAdd: false}
 	}
 }
@@ -426,7 +432,10 @@ func (m *Model) loadSavedRoutes() (*Model, tea.Cmd) {
 				errs = append(errs, fmt.Sprintf("%s/%d: 地址无效", rc.Dest, rc.PrefixLen))
 				continue
 			}
-			if err := AddRoute(dest.To4(), rc.PrefixLen, nextHop.To4(), rc.IfIndex, rc.Metric); err != nil {
+			if err := AddRoute(AddRouteParams{
+				Dest: dest.To4(), PrefixLen: rc.PrefixLen,
+				Gateway: nextHop.To4(), IfIndex: rc.IfIndex, Metric: rc.Metric,
+			}); err != nil {
 				errs = append(errs, fmt.Sprintf("%s/%d: %v", rc.Dest, rc.PrefixLen, err))
 			} else {
 				added++

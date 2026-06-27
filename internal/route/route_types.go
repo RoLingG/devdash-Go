@@ -17,6 +17,23 @@ type RouteEntry struct {
 	IsStatic  bool   // 是否静态路由
 }
 
+// AddRouteParams 添加路由的参数
+type AddRouteParams struct {
+	Dest      net.IP // 目标地址
+	PrefixLen uint8  // 前缀长度
+	Gateway   net.IP // 网关地址
+	IfIndex   uint32 // 接口索引
+	Metric    uint32 // 跃点数
+}
+
+// DeleteRouteParams 删除路由的参数
+type DeleteRouteParams struct {
+	Dest      string // 目标地址
+	PrefixLen uint8  // 前缀长度
+	NextHop   string // 网关地址
+	IfIndex   uint32 // 接口索引
+}
+
 // IfaceAddr 网络接口的单个地址信息
 type IfaceAddr struct {
 	IP        string // IP 地址（如 "192.168.31.220" 或 "fe80::c91:af12:89f1:73df"）

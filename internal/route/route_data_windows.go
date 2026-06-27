@@ -94,20 +94,20 @@ func GetRoutes() ([]RouteEntry, error) {
 }
 
 // AddRoute 添加静态路由（需要管理员权限）
-func AddRoute(dest net.IP, prefixLen uint8, gateway net.IP, ifIndex uint32, metric uint32) error {
+func AddRoute(p AddRouteParams) error {
 	var row windows.MibIpForwardRow2
 	// 微软要求：必须先调 InitializeIpForwardEntry 初始化结构体
 	// 它会设置 InterfaceLuid、SitePrefixLength、ValidLifetime 等内部字段为默认值
 	procInitializeIpForwardEntry.Call(uintptr(unsafe.Pointer(&row)))
 
 	// 初始化后再覆盖我们需要的字段
-	row.InterfaceIndex = ifIndex
+	row.InterfaceIndex = p.IfIndex
 	row.DestinationPrefix = windows.IpAddressPrefix{
-		Prefix:       ipToRawSockaddrInet(dest),
-		PrefixLength: prefixLen,
+		Prefix:       ipToRawSockaddrInet(p.Dest),
+		PrefixLength: p.PrefixLen,
 	}
-	row.NextHop = ipToRawSockaddrInet(gateway)
-	row.Metric = metric
+	row.NextHop = ipToRawSockaddrInet(p.Gateway)
+	row.Metric = p.Metric
 	row.Protocol = windows.MIB_IPPROTO_NETMGMT
 	row.Immortal = 1
 
@@ -118,9 +118,9 @@ func AddRoute(dest net.IP, prefixLen uint8, gateway net.IP, ifIndex uint32, metr
 	return nil
 }
 
-// DeleteRoute 删除路由（需要 root 权限）
+// DeleteRoute 删除路由（需要管理员权限）
 // 内部查找匹配的路由行后调用 DeleteIpForwardEntry2
-func DeleteRoute(dest string, prefixLen uint8, nextHop string, ifIndex uint32) error {
+func DeleteRoute(p DeleteRouteParams) error {
 	// 获取路由表，找到匹配的行
 	var table *windows.MibIpForwardTable2
 	err := windows.GetIpForwardTable2(windows.AF_INET, &table)
@@ -129,10 +129,10 @@ func DeleteRoute(dest string, prefixLen uint8, nextHop string, ifIndex uint32) e
 	}
 	defer windows.FreeMibTable(unsafe.Pointer(table))
 
-	destIP := net.ParseIP(dest)
-	gwIP := net.ParseIP(nextHop)
+	destIP := net.ParseIP(p.Dest)
+	gwIP := net.ParseIP(p.NextHop)
 	if destIP == nil || gwIP == nil {
-		return fmt.Errorf("invalid address: %s or %s", dest, nextHop)
+		return fmt.Errorf("invalid address: %s or %s", p.Dest, p.NextHop)
 	}
 
 	rows := table.Rows()
@@ -143,8 +143,8 @@ func DeleteRoute(dest string, prefixLen uint8, nextHop string, ifIndex uint32) e
 
 		if rowDest.Equal(destIP.To4()) &&
 			rowGW.Equal(gwIP.To4()) &&
-			row.DestinationPrefix.PrefixLength == prefixLen &&
-			row.InterfaceIndex == ifIndex {
+			row.DestinationPrefix.PrefixLength == p.PrefixLen &&
+			row.InterfaceIndex == p.IfIndex {
 
 			ret, _, _ := procDeleteIpForwardEntry2.Call(uintptr(unsafe.Pointer(row)))
 			if ret != 0 {
@@ -153,7 +153,7 @@ func DeleteRoute(dest string, prefixLen uint8, nextHop string, ifIndex uint32) e
 			return nil
 		}
 	}
-	return fmt.Errorf("route not found: %s/%d via %s", dest, prefixLen, nextHop)
+	return fmt.Errorf("route not found: %s/%d via %s", p.Dest, p.PrefixLen, p.NextHop)
 }
 
 // IsAdmin 检测当前进程是否以 root 权限运行

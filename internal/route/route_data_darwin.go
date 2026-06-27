@@ -137,17 +137,17 @@ func GetRoutes() ([]RouteEntry, error) {
 }
 
 // AddRoute 添加静态路由（需要 root 权限）
-func AddRoute(dest net.IP, prefixLen uint8, gateway net.IP, ifIndex uint32, metric uint32) error {
-	destStr := dest.String()
-	gwStr := gateway.String()
+func AddRoute(p AddRouteParams) error {
+	destStr := p.Dest.String()
+	gwStr := p.Gateway.String()
 
 	var cmd *exec.Cmd
-	if prefixLen == 0 {
+	if p.PrefixLen == 0 {
 		// 默认路由
 		cmd = exec.Command("route", "add", "default", gwStr)
 	} else {
 		cmd = exec.Command("route", "add", "-net",
-			fmt.Sprintf("%s/%d", destStr, prefixLen), gwStr)
+			fmt.Sprintf("%s/%d", destStr, p.PrefixLen), gwStr)
 	}
 
 	output, err := cmd.CombinedOutput()
@@ -158,13 +158,13 @@ func AddRoute(dest net.IP, prefixLen uint8, gateway net.IP, ifIndex uint32, metr
 }
 
 // DeleteRoute 删除路由（需要 root 权限）
-func DeleteRoute(dest string, prefixLen uint8, nextHop string, ifIndex uint32) error {
+func DeleteRoute(p DeleteRouteParams) error {
 	var cmd *exec.Cmd
-	if prefixLen == 0 {
+	if p.PrefixLen == 0 {
 		cmd = exec.Command("route", "delete", "default")
 	} else {
 		cmd = exec.Command("route", "delete", "-net",
-			fmt.Sprintf("%s/%d", dest, prefixLen))
+			fmt.Sprintf("%s/%d", p.Dest, p.PrefixLen))
 	}
 
 	output, err := cmd.CombinedOutput()
