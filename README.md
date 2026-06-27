@@ -1,6 +1,6 @@
 # devdash - 开发者终端工具箱
 
-一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 7 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
+一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 8 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
 
 ## 功能模块
 
@@ -13,6 +13,7 @@
 | `5` | 系统监控 | CPU 总体/每核心使用率、内存/磁盘进度条、进程列表、阈值颜色预警、Tab 切换子视图 |
 | `6` | 端口扫描 | 预设开发端口扫描、自定义端口、并发扫描、状态显示 |
 | `7` | LinuxDo 论坛 | 分类浏览、帖子列表、帖子详情、无限滚动、Cookie 认证 |
+| `8` | 路由管理 | 跨平台路由表（Windows/macOS）、添加/删除静态路由、网卡信息、持久化 |
 
 ## 安装与运行
 
@@ -47,6 +48,8 @@ cat app.log | ./devdash.exe
 
 启动时会显示 TUI 配置选择界面，可选择 Git 仓库路径、日志文件路径、天气城市、配置文件路径。配置会自动保存为 `devdash.json`（exe 同目录），下次启动自动加载上次的设置。
 
+选择配置后会显示启动闪屏（ASCII Logo + 版本信息），任意按键或 2 秒后自动进入主界面。
+
 ## 持久化配置
 
 - `Ctrl+S` - 保存当前配置到 `devdash.json`
@@ -59,9 +62,10 @@ cat app.log | ./devdash.exe
 
 | 快捷键 | 功能 |
 |--------|------|
-| `1` `2` `3` `4` `5` `6` `7` | 切换模块 |
+| `1` `2` `3` `4` `5` `6` `7` `8` | 切换模块 |
 | `?` | 帮助面板（显示当前模块快捷键） |
 | `Ctrl+S` | 保存配置 |
+| `Ctrl+T` | 切换暗色/亮色主题 |
 | `Ctrl+Q` / `Ctrl+C` | 退出 |
 
 ### Git 模块 (`1`)
@@ -69,16 +73,6 @@ cat app.log | ./devdash.exe
 - `/` - 输入仓库路径（支持目录扫描，列出含 `.git` 的子目录）
 - 输入模式下 `↑` `↓` - 浏览最近使用的仓库
 - `Ctrl+R` - 刷新数据（智能缓存：检测 `.git/index` 变化，未变化时使用缓存）
-
-**显示内容：**
-- 提交历史（Hash、作者、日期、消息）
-- 分支列表（当前分支高亮）
-- **ahead/behind 状态**（header 显示 `↑3 ↓2` 徽章，表示本地领先/落后远程的提交数）
-- **工作区 dirty 状态**（header 显示 `📝 3M 1A 2D 1??` 格式，分别表示 Modified/Added/Deleted/Untracked 文件数）
-- 热文件（变更最频繁的文件柱状图）
-- 仓库统计（总提交数、分支数、文件数、活跃天数）
-- **并发加载**（6 个 git 命令并发执行，加载速度显著提升）
-- **空状态提示**（无 commit 时显示 "📭 仓库暂无提交记录"）
 
 ### 日志模块 (`2`)
 - `↑` `↓` / `k` `j` - 页内光标移动
@@ -94,27 +88,11 @@ cat app.log | ./devdash.exe
 - `Esc` - 关闭输入框
 - `Ctrl+R` - 刷新日志（智能缓存：检测文件 mtime 变化，未变化时使用缓存）
 
-**显示内容：**
-- 每页 10 条日志，分页浏览
-- 彩色日志级别高亮（ERROR 红色、WARN 黄色、INFO 绿色、DEBUG 灰色）
-- 正则表达式过滤 + 级别筛选（可叠加）
-- 匹配子串黄色背景高亮
-- 页码信息（当前页/总页数，条目范围）
-- 底部统计（各级别日志数量）
-- **空状态提示**（无匹配结果时显示 "🔍 没有找到匹配的日志行，尝试修改过滤条件"）
-- **友好错误提示**（文件不存在/权限错误时显示红色错误信息 + 操作提示）
-- **大文件保护**（超过 100MB 或 100 万行自动拒绝，50MB+ 显示警告）
-
 ### 天气模块 (`3`)
 - `↑` `↓` / `k` `j` - 滚动内容
 - `/` - 切换城市
 - 输入模式下 `↑` `↓` - 浏览最近使用过的城市
 - `Ctrl+R` - 刷新天气数据
-
-**显示内容：**
-- 当前天气（温度、体感温度、湿度、风速、能见度、UV 指数）
-- ASCII 天气图标
-- 3 天预报（一行多列紧凑布局，显示每 3 小时温度）
 
 ### 配置模块 (`4`)
 - `↑` `↓` / `k` `j` - 导航
@@ -129,15 +107,6 @@ cat app.log | ./devdash.exe
 - `Ctrl+U` - 清除搜索
 - `Esc` - 关闭输入框
 
-**显示内容：**
-- 支持 JSON/YAML/TOML 格式
-- 树形结构展示，折叠/展开节点
-- 搜索关键词高亮，快速跳转匹配项
-- 当前节点完整路径显示（header 区域 `📍 key1 / key2 / key3`）
-- 语法高亮（字符串、数字、布尔值、null）
-- **空状态提示**（空配置文件时显示 "📄 配置文件为空"）
-- **友好错误提示**（文件解析失败时显示红色错误信息 + 操作提示）
-
 ### 系统监控模块 (`5`)
 - `Tab` - 切换子视图（系统概览 ↔ 进程列表）
 - `↑` `↓` / `k` `j` - 滚动
@@ -147,14 +116,6 @@ cat app.log | ./devdash.exe
 - `Ctrl+U` - 清空 filter
 - `Esc` - 关闭输入框
 
-**显示内容：**
-- CPU 总体使用率 + 每核心使用率（4 列网格平铺，窄终端自动 2 列）
-- 内存使用（已用/总量 + 进度条）
-- 磁盘使用（各分区已用/总量 + 进程条）
-- 进程列表（PID、名称、CPU%、内存 MB，按 CPU 降序）
-- **阈值颜色系统**（<70% 灰色、>=70% 黄色、>=90% 红色）
-- **CPU 核心奇偶标签色**（偶数蓝色、奇数粉色，便于区分）
-
 ### 端口扫描模块 (`6`)
 - `↑` `↓` / `k` `j` - 滚动端口列表
 - `Home` / `End` - 跳转首/末
@@ -162,11 +123,6 @@ cat app.log | ./devdash.exe
 - `Ctrl+R` - 重新扫描
 - `Ctrl+U` - 清空自定义端口
 - `Esc` - 关闭输入框
-
-**显示内容：**
-- 17 个预设开发端口（SSH、HTTP、HTTPS、MySQL、PostgreSQL、Redis 等）
-- 并发扫描（500ms 超时），开放端口绿色 ✓、关闭端口灰色 ✗
-- 用户自定义端口支持
 
 ### LinuxDo 论坛模块 (`7`)
 - `↑` `↓` / `k` `j` - 滚动/移动选中
@@ -178,12 +134,16 @@ cat app.log | ./devdash.exe
 - `Ctrl+R` - 刷新当前视图
 - `Ctrl+U` - 清空 Cookie
 
-**显示内容：**
-- 三级导航：分类列表 → 帖子列表 → 帖子详情
-- 分类列表（首项 "📌 Latest" 显示全站最新帖子）
-- 帖子列表（标题、回复数、浏览量，无限滚动自动加载下一页）
-- 帖子详情（HTML→纯文本转换，无限滚动自动加载全部回复）
-- 帖子总数统计（header 显示 `(已加载/总数)` 格式）
+### 路由管理模块 (`8`)
+- `↑` `↓` / `k` `j` - 滚动
+- `Home` / `End` - 跳转首/末
+- `Tab` - 切换路由表/接口视图
+- `Ctrl+A` - 添加静态路由（overlay 表单）
+- `Ctrl+D` - 删除选中路由
+- `Ctrl+S` - 保存当前静态路由到配置文件
+- `Ctrl+L` - 从配置文件加载并应用路由（增量，跳过已存在的）
+- `Ctrl+R` - 刷新
+- `Esc` - 关闭 overlay
 
 ## 项目结构
 
@@ -218,12 +178,17 @@ cava_go/
 │   ├── system/                    # 系统监控模块
 │   │   ├── system_data.go         # gopsutil 系统信息采集（CPU/内存/磁盘/进程）
 │   │   └── system_model.go        # Model + Init/Update/View
-│   └── ports/                     # 端口扫描模块
-│       ├── ports_data.go          # 端口扫描逻辑（并发 + 超时）
-│       └── ports_model.go         # Model + Init/Update/View
-│   └── linuxdo/                   # LinuxDo 论坛模块
-│       ├── linuxdo_data.go        # 数据类型、Discourse API 请求、HTML→纯文本
-│       └── linuxdo_model.go       # Model + Init/Update/View（三级视图）
+│   ├── ports/                     # 端口扫描模块
+│   │   ├── ports_data.go          # 端口扫描逻辑（并发 + 超时）
+│   │   └── ports_model.go         # Model + Init/Update/View
+│   ├── linuxdo/                   # LinuxDo 论坛模块
+│   │   ├── linuxdo_data.go        # 数据类型、Discourse API 请求、HTML→纯文本
+│   │   └── linuxdo_model.go       # Model + Init/Update/View（三级视图）
+│   └── route/                     # 路由管理模块
+│       ├── route_types.go         # 共享类型（RouteEntry、IfaceInfo、IfaceAddr）+ GetInterfaces()
+│       ├── route_model.go         # Model + Init/Update/View（跨平台共享）
+│       ├── route_data_windows.go  # Win32 API 实现（//go:build windows）
+│       └── route_data_darwin.go   # netstat + route 实现（//go:build darwin）
 └──
 ```
 
@@ -234,6 +199,7 @@ cava_go/
 - [yaml.v3](https://gopkg.in/yaml.v3) - YAML 解析
 - [BurntSushi/toml](https://github.com/BurntSushi/toml) - TOML 解析
 - [gopsutil/v4](https://github.com/shirou/gopsutil) - 跨平台系统信息采集（CPU/内存/磁盘/进程）
+- [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys) - 系统调用（Windows API 封装，路由管理模块使用）
 
 ## License
 
