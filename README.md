@@ -112,7 +112,7 @@ cat app.log | ./devdash.exe
 - `↑` `↓` / `k` `j` - 滚动
 - `Home` / `End` - 跳转首/末
 - `/` - 打开输入（进程名 filter）
-- `Ctrl+R` - 刷新数据
+- `Ctrl+R` - 手动刷新数据
 - `Ctrl+U` - 清空 filter
 - `Esc` - 关闭输入框
 

@@ -3,6 +3,7 @@ package system
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
@@ -27,7 +28,7 @@ type Model struct {
 	loaded   bool
 	err      error
 	sysInfo  SysInfoMsg
-	procs    []ProcessInfo
+	process  []ProcessInfo
 	filtered []ProcessInfo // 过滤后的进程列表
 	view     viewMode
 	scroll   int
@@ -35,9 +36,17 @@ type Model struct {
 	input    component.InputModel
 }
 
+type SysTickMsg struct{}
+
+func sysTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg {
+		return SysTickMsg{}
+	})
+}
+
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
-	return tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd())
+	return tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), sysTickCmd(1*time.Second))
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -48,12 +57,12 @@ func (m *Model) InputActive() bool { return m.input.Active }
 // applyFilter 应用进程名过滤
 func (m *Model) applyFilter() {
 	if m.filter == "" {
-		m.filtered = m.procs
+		m.filtered = m.process
 		return
 	}
 	m.filtered = nil
 	lower := strings.ToLower(m.filter)
-	for _, p := range m.procs {
+	for _, p := range m.process {
 		if strings.Contains(strings.ToLower(p.Name), lower) {
 			m.filtered = append(m.filtered, p)
 		}
@@ -70,9 +79,11 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		m.loaded = true
 		m.loading = false
+	case SysTickMsg:
+		return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), sysTickCmd(2*time.Second))
 	case ProcMsg:
 		if msg.Err == nil {
-			m.procs = msg.Processes
+			m.process = msg.Processes
 			m.applyFilter()
 		}
 	case tea.PasteMsg:

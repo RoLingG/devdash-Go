@@ -244,7 +244,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case system.SysInfoMsg, system.ProcMsg:
+	case system.SysInfoMsg, system.ProcMsg, system.SysTickMsg:
 		var cmd tea.Cmd
 		m.sys, cmd = m.sys.Update(msg)
 		if cmd != nil {
