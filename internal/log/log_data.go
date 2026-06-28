@@ -38,13 +38,13 @@ type DirMsg struct {
 	Files []string
 }
 
-// tailTickMsg tail -f 定时检查消息
-type tailTickMsg struct{}
+// TailTickMsg tail -f 定时检查消息（导出供 main.go 跨模块路由使用）
+type TailTickMsg struct{}
 
-// tailTickCmd 延迟 duration 后发送 tailTickMsg（链式调用实现周期监听）
+// tailTickCmd 延迟 duration 后发送 TailTickMsg（链式调用实现周期监听）
 func tailTickCmd(duration time.Duration) tea.Cmd {
 	return tea.Tick(duration, func(time.Time) tea.Msg {
-		return tailTickMsg{}
+		return TailTickMsg{}
 	})
 }
 

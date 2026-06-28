@@ -182,7 +182,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.input.Active = false
 		return m, nil
 
-	case tailTickMsg:
+	case TailTickMsg:
 		if !m.tailFMode || m.logPath == "" {
 			return m, nil
 		}
@@ -395,9 +395,15 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+r":
 			if m.logPath != "" {
 				if m.reloadFromCache() {
+					if m.tailFMode {
+						return m, tailTickCmd(2 * time.Second)
+					}
 					return m, nil
 				}
-				return m, func() tea.Msg { return LoadFromFile(m.logPath) }
+				if m.tailFMode {
+					return m, tea.Batch(LoadFromFileCmd(m.logPath), tailTickCmd(2*time.Second))
+				}
+				return m, LoadFromFileCmd(m.logPath)
 			}
 		case "enter":
 			m.applyFilter()

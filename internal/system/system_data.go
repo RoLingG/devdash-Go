@@ -55,6 +55,16 @@ type ProcMsg struct {
 	Err       error
 }
 
+// SysTickMsg 定时刷新消息
+type SysTickMsg struct{}
+
+// SysTickCmd 延迟 duration 后发送 SysTickMsg（链式调用实现周期轮询）
+func SysTickCmd(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg {
+		return SysTickMsg{}
+	})
+}
+
 // FetchSystemInfo 获取系统信息
 func FetchSystemInfo() tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

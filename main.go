@@ -225,6 +225,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// 跨模块消息：异步加载结果可能在用户切到其他 Tab 后才返回
 	// 必须在顶层拦截，否则当前 Tab 的模块会丢弃这些消息
+	// crossHandled 标记已由跨模块路由处理的消息，避免重复转发给活跃模块
+	crossHandled := false
 	switch msg := msg.(type) {
 	case log.LoadMsg, log.DirMsg:
 		var cmd tea.Cmd
@@ -232,46 +234,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		crossHandled = true
 	case git.InfoMsg, git.DirMsg:
 		var cmd tea.Cmd
 		m.git, cmd = m.git.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		crossHandled = true
 	case config.LoadMsg, config.DirMsg:
 		var cmd tea.Cmd
 		m.config, cmd = m.config.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case system.SysInfoMsg, system.ProcMsg, system.SysTickMsg:
+		crossHandled = true
+	case system.SysInfoMsg, system.ProcMsg:
 		var cmd tea.Cmd
 		m.sys, cmd = m.sys.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		crossHandled = true
 	case ports.PortsMsg:
 		var cmd tea.Cmd
 		m.ports, cmd = m.ports.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		crossHandled = true
 	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg, linuxdo.PostStreamMsg, linuxdo.SearchMsg:
 		var cmd tea.Cmd
 		m.linuxdo, cmd = m.linuxdo.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		crossHandled = true
 	case route.RoutesMsg, route.RouteActionMsg:
 		var cmd tea.Cmd
 		m.routeMod, cmd = m.routeMod.Update(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		crossHandled = true
 	}
 
 	// 把消息转发给当前激活的子模块处理
-	// 每个子模块自己决定如何处理键盘、鼠标等事件
+	// 跨模块消息已由上方处理，不再重复转发（避免 tea.Tick 等消息被处理两次导致指数累积）
+	if !crossHandled {
 	switch m.state {
 	case ui.TabGit:
 		var cmd tea.Cmd
@@ -305,6 +315,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.routeMod, cmd = m.routeMod.Update(msg)
 		cmds = append(cmds, cmd)
+	}
 	}
 
 	return m, tea.Batch(cmds...)

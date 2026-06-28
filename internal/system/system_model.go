@@ -13,6 +13,7 @@ import (
 )
 
 // viewMode 子视图类型
+
 type viewMode int
 
 const (
@@ -36,17 +37,9 @@ type Model struct {
 	input    component.InputModel
 }
 
-type SysTickMsg struct{}
-
-func sysTickCmd(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(time.Time) tea.Msg {
-		return SysTickMsg{}
-	})
-}
-
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
-	return tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), sysTickCmd(1*time.Second))
+	return tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second))
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -80,7 +73,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.loaded = true
 		m.loading = false
 	case SysTickMsg:
-		return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), sysTickCmd(2*time.Second))
+		return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second))
 	case ProcMsg:
 		if msg.Err == nil {
 			m.process = msg.Processes
@@ -111,7 +104,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+r":
 			m.loading = true
 			m.err = nil
-			return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd())
+			return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second))
 		case "/":
 			m.input.Prompt = "Filter:"
 			m.input.Open(m.filter)
