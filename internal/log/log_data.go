@@ -3,6 +3,7 @@ package log
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,14 +39,73 @@ type DirMsg struct {
 	Files []string
 }
 
-// TailTickMsg tail -f 定时检查消息（导出供 main.go 跨模块路由使用）
-type TailTickMsg struct{}
+// TailDataMsg tail -f 文件变化消息（导出供 main.go 跨模块路由使用）
+type TailDataMsg struct {
+	Lines []Line // 新增的日志行
+	Err   error  // 错误（EOF 表示 channel 关闭）
+	Done  bool   // channel 已关闭，停止监听
+}
 
-// tailTickCmd 延迟 duration 后发送 TailTickMsg（链式调用实现周期监听）
-func tailTickCmd(duration time.Duration) tea.Cmd {
-	return tea.Tick(duration, func(time.Time) tea.Msg {
-		return TailTickMsg{}
-	})
+// watchFile 启动 goroutine 监听文件变化，通过 channel 返回新增内容
+func watchFile(path string, offset int64, done <-chan struct{}) <-chan []byte {
+	ch := make(chan []byte, 1)
+	go func() {
+		defer close(ch)
+		f, err := os.Open(path)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		f.Seek(offset, io.SeekStart)
+
+		buf := make([]byte, 64*1024) // 64KB 读缓冲
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			n, err := f.Read(buf) // 阻塞读取内容
+			if n > 0 {
+				// 复制后再发给 channel，避免数据竞争
+				data := make([]byte, n)
+				copy(data, buf[:n])
+				select {
+				case ch <- data:
+				case <-done:
+					return
+				}
+			}
+			if err != nil {
+				if err == io.EOF {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				return
+			}
+		}
+	}()
+	return ch
+}
+
+// receiveTailCmd 阻塞等待 channel 返回数据的 Cmd
+func receiveTailCmd(ch <-chan []byte) tea.Cmd {
+	return func() tea.Msg {
+		data, ok := <-ch
+		if !ok {
+			return TailDataMsg{Done: true}
+		}
+		var lines []Line
+		scanner := bufio.NewScanner(strings.NewReader(string(data)))
+		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+		for scanner.Scan() {
+			raw := scanner.Text()
+			if raw != "" {
+				lines = append(lines, Line{Raw: raw, Level: detectLevel(raw)})
+			}
+		}
+		return TailDataMsg{Lines: lines}
+	}
 }
 
 // LoadFromStdin 从 stdin 读取日志（pipe 场景）

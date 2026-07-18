@@ -228,7 +228,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// crossHandled 标记已由跨模块路由处理的消息，避免重复转发给活跃模块
 	crossHandled := false
 	switch msg := msg.(type) {
-	case log.LoadMsg, log.DirMsg:
+	case log.LoadMsg, log.DirMsg, log.TailDataMsg:
 		var cmd tea.Cmd
 		m.log, cmd = m.log.Update(msg)
 		if cmd != nil {

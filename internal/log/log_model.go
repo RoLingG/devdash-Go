@@ -25,7 +25,6 @@ type Model struct {
 	loaded   bool
 	errMsg   string
 	warnMsg  string // 大文件警告
-	trunc    bool   // 是否被截断
 	logPath  string
 
 	page      int
@@ -46,7 +45,8 @@ type Model struct {
 	levelSel     map[int]bool
 
 	tailFMode bool
-	lastMtime time.Time
+	tailCh    <-chan []byte
+	tailDone  chan struct{}
 
 	cachedLines []Line
 	cachedMtime time.Time
@@ -156,7 +156,6 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.all = lines
 		m.loaded = true
 		m.warnMsg = msg.Warn
-		m.trunc = msg.Trunc
 		m.cachedLines = lines
 		m.cachedPath = m.logPath
 		if info, err := os.Stat(m.logPath); err == nil {
@@ -182,19 +181,17 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.input.Active = false
 		return m, nil
 
-	case TailTickMsg:
-		if !m.tailFMode || m.logPath == "" {
+	case TailDataMsg:
+		if msg.Done || msg.Err != nil {
+			// channel 关闭或出错，停止监听
+			m.tailFMode = false
 			return m, nil
 		}
-		info, err := os.Stat(m.logPath)
-		if err != nil {
-			return m, nil
-		}
-		if info.ModTime().After(m.lastMtime) {
-			m.lastMtime = info.ModTime()
-			return m, tea.Batch(LoadFromFileCmd(m.logPath), tailTickCmd(2*time.Second))
-		}
-		return m, tailTickCmd(2 * time.Second)
+		// 追加新行到日志
+		m.all = append(m.all, msg.Lines...)
+		m.applyFilter()
+		// 继续接收下一块数据
+		return m, receiveTailCmd(m.tailCh)
 
 	case tea.PasteMsg:
 		if m.input.Active {
@@ -386,22 +383,44 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+f":
 			m.tailFMode = !m.tailFMode
 			if m.tailFMode && m.logPath != "" {
+				// 获取当前文件大小作为起始偏移
 				info, err := os.Stat(m.logPath)
-				if err == nil {
-					m.lastMtime = info.ModTime()
+				if err != nil {
+					m.tailFMode = false
+					return m, nil
 				}
-				return m, tailTickCmd(2 * time.Second)
+				offset := info.Size()
+				m.tailDone = make(chan struct{})
+				m.tailCh = watchFile(m.logPath, offset, m.tailDone)
+				return m, receiveTailCmd(m.tailCh)
+			}
+			if !m.tailFMode && m.tailDone != nil {
+				// 关闭 goroutine
+				close(m.tailDone)
+				m.tailDone = nil
+				m.tailCh = nil
 			}
 		case "ctrl+r":
 			if m.logPath != "" {
+				// tail 模式下重启 goroutine
+				if m.tailFMode {
+					if m.tailDone != nil {
+						close(m.tailDone)
+					}
+					info, err := os.Stat(m.logPath)
+					if err == nil {
+						m.tailDone = make(chan struct{})
+						m.tailCh = watchFile(m.logPath, info.Size(), m.tailDone)
+					}
+				}
 				if m.reloadFromCache() {
 					if m.tailFMode {
-						return m, tailTickCmd(2 * time.Second)
+						return m, receiveTailCmd(m.tailCh)
 					}
 					return m, nil
 				}
 				if m.tailFMode {
-					return m, tea.Batch(LoadFromFileCmd(m.logPath), tailTickCmd(2*time.Second))
+					return m, tea.Batch(LoadFromFileCmd(m.logPath), receiveTailCmd(m.tailCh))
 				}
 				return m, LoadFromFileCmd(m.logPath)
 			}
