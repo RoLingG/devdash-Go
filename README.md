@@ -1,5 +1,7 @@
 # devdash - 开发者终端工具箱
 
+**简体中文** | [English](readme/README_EN.md) | [繁體中文](readme/README_TW.md)
+
 一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 8 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
 
 ## 功能模块

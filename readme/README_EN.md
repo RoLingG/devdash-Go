@@ -1,5 +1,7 @@
 # devdash - Developer Terminal Toolkit
 
+[简体中文](../README.md) | **English** | [繁體中文](README_TW.md)
+
 A terminal dashboard based on [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) framework, integrating 8 practical modules with numeric key quick switching, nano-style dual-line status bar, and `?` key help panel.
 
 ## Features

@@ -1,5 +1,7 @@
 # devdash - 開發者終端工具箱
 
+[简体中文](../README.md) | [English](README_EN.md) | **繁體中文**
+
 一個基於 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的終端儀表板，整合 8 個實用模組，數字鍵快速切換，nano 風格雙行狀態列，`?` 鍵呼出說明面板。
 
 ## 功能模組
