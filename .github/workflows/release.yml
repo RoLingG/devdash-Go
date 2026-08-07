@@ -93,7 +93,7 @@ jobs:
         with:
           path: artifacts
 
-      # 用官方 action 创建 Release：tag 名 = 版本号，自动生成 release notes
+      # 用官方 action 创建 Release：tag 名 = 版本号
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
