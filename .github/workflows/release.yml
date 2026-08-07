@@ -28,13 +28,10 @@ jobs:
       - name: Go vet
         run: go vet ./...
 
-      - name: Go test with coverage
-        run: go test ./... -coverprofile=coverage.out
-
-      # 覆盖率门槛: 全部包聚合覆盖率必须 >= 60%
-      - name: Check coverage threshold (>= 60%)
+      - name: Go test with coverage + threshold check (>= 60%)
         shell: bash
         run: |
+          go test ./... -coverprofile=coverage.out
           total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
           awk -v t="$total" 'BEGIN { if (t < 60) { print "Coverage " t "% < 60%, failing"; exit 1 } print "Total coverage: " t "%" }'
 
