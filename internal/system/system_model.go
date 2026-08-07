@@ -2,6 +2,7 @@ package system
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 	"cava_go/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // viewMode 子视图类型
@@ -330,7 +331,8 @@ func renderPercent(pct float64) string {
 }
 
 // colorForPercent 根据百分比返回颜色
-func colorForPercent(pct float64) lipgloss.Color {
+// 修改: lipgloss v2 中颜色类型改为标准库 image/color.Color
+func colorForPercent(pct float64) color.Color {
 	if pct >= 90 {
 		return ui.ColRed
 	} else if pct >= 70 {

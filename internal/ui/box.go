@@ -2,9 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Box 用边框包裹内容并加标题
@@ -21,7 +22,8 @@ func Box(title, content string, width int) string {
 }
 
 // Card 创建一个带边框的卡片
-func Card(title, content string, borderColor lipgloss.Color, width int) string {
+// 修改: lipgloss v2 中颜色参数类型改为标准库 image/color.Color
+func Card(title, content string, borderColor color.Color, width int) string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(borderColor).
@@ -37,7 +39,7 @@ func Card(title, content string, borderColor lipgloss.Color, width int) string {
 }
 
 // BarChart 绘制水平柱状图的一行
-func BarChart(label string, value, maxValue, barMaxWidth int, barColor lipgloss.Color) string {
+func BarChart(label string, value, maxValue, barMaxWidth int, barColor color.Color) string {
 	name := PadRight(Truncate(label, 20), 20)
 	barLen := 1
 	if maxValue > 0 {

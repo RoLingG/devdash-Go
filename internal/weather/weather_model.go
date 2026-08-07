@@ -2,6 +2,7 @@ package weather
 
 import (
 	"fmt"
+	"image/color"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"cava_go/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Model 天气面板模块状态
@@ -213,7 +214,8 @@ func (m *Model) View() string {
 			return "☀"
 		}
 
-		getTempColor := func(temp int) lipgloss.Color {
+		// 修改: lipgloss v2 中颜色类型改为标准库 image/color.Color
+		getTempColor := func(temp int) color.Color {
 			if temp >= 30 {
 				return ui.ColRed
 			} else if temp >= 20 {

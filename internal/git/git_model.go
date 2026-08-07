@@ -11,7 +11,7 @@ import (
 	"cava_go/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // InfoMsg 异步加载完成后的消息类型

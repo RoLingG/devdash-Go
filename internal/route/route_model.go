@@ -10,7 +10,7 @@ import (
 	"cava_go/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ---- 消息类型 ----

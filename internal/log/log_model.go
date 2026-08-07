@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,7 +13,7 @@ import (
 	"cava_go/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Model 日志查看器模块状态
@@ -748,7 +749,8 @@ func wrapLine(s string, maxW int) []string {
 }
 
 func colorizeLog(l Line, filter string) string {
-	var color lipgloss.Color
+	// 修改: lipgloss v2 中颜色类型改为标准库 image/color.Color
+	var color color.Color
 	switch l.Level {
 	case "ERROR":
 		color = ui.ColRed

@@ -1,33 +1,39 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // ---- 主题系统 ----
 
 // Theme 包含所有可切换的颜色值
+// 修改: lipgloss v2 中 Color 从字符串类型变为函数, 字段类型改用标准库 image/color.Color
 type Theme struct {
-	Primary   lipgloss.Color
-	Secondary lipgloss.Color
-	Accent    lipgloss.Color
-	Text      lipgloss.Color
-	Muted     lipgloss.Color
-	Green     lipgloss.Color
-	Red       lipgloss.Color
-	Blue      lipgloss.Color
-	BgDark    lipgloss.Color
-	BgMid     lipgloss.Color
+	Primary   color.Color
+	Secondary color.Color
+	Accent    color.Color
+	Text      color.Color
+	Muted     color.Color
+	Green     color.Color
+	Red       color.Color
+	Blue      color.Color
+	BgDark    color.Color
+	BgMid     color.Color
 }
 
 var darkTheme = Theme{
-	Primary: "205", Secondary: "62", Accent: "226",
-	Text: "252", Muted: "243", Green: "82", Red: "196", Blue: "39",
-	BgDark: "235", BgMid: "237",
+	// 修改: v2 中 color.Color 是接口类型, 需用 lipgloss.Color() 函数把字符串转成具体颜色
+	Primary: lipgloss.Color("205"), Secondary: lipgloss.Color("62"), Accent: lipgloss.Color("226"),
+	Text: lipgloss.Color("252"), Muted: lipgloss.Color("243"), Green: lipgloss.Color("82"), Red: lipgloss.Color("196"), Blue: lipgloss.Color("39"),
+	BgDark: lipgloss.Color("235"), BgMid: lipgloss.Color("237"),
 }
 
 var lightTheme = Theme{
-	Primary: "133", Secondary: "68", Accent: "178",
-	Text: "238", Muted: "245", Green: "28", Red: "160", Blue: "25",
-	BgDark: "252", BgMid: "250",
+	Primary: lipgloss.Color("133"), Secondary: lipgloss.Color("68"), Accent: lipgloss.Color("178"),
+	Text: lipgloss.Color("238"), Muted: lipgloss.Color("245"), Green: lipgloss.Color("28"), Red: lipgloss.Color("160"), Blue: lipgloss.Color("25"),
+	BgDark: lipgloss.Color("252"), BgMid: lipgloss.Color("250"),
 }
 
 var currentTheme = darkTheme

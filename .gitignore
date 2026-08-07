@@ -4,4 +4,5 @@ devdash.exe
 devdash.exe~
 devdash.json
 devdash
-*_test.go
+release/
+coverage.out
