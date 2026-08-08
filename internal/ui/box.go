@@ -11,7 +11,7 @@ import (
 // Box 用边框包裹内容并加标题
 func Box(title, content string, width int) string {
 	header := StyleTitle().Render(title)
-	maxW := width - 4
+	maxW := width // lipgloss v2 的 Width(w) 是"最终总宽"（含边框+内边距），故传 width 即占满 width
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
 		if lipgloss.Width(line) > maxW {

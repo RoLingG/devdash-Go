@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -82,15 +83,19 @@ type Model struct {
 	// 输入框
 	input       component.InputModel
 	inputTarget inputTarget // 当前输入的是哪个字段
+
+	spinner spinner.Model // bubbles 加载动画
 }
 
 func (m *Model) Init(cookie, userAgent string) tea.Cmd {
 	m.cookie = cookie
 	m.userAgent = userAgent
 	m.mode = viewCategories
+	m.spinner = spinner.New()
+	m.spinner.Spinner = spinner.Dot
 	if cookie != "" {
 		m.catLoading = true
-		return FetchCategoriesCmd(cookie, userAgent)
+		return tea.Batch(FetchCategoriesCmd(cookie, userAgent), m.spinner.Tick)
 	}
 	return nil
 }
@@ -114,6 +119,11 @@ func (m *Model) SetUserAgent(ua string) {
 
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
 	case CategoriesMsg:
 		m.catLoading = false
 		if msg.Err != nil {
@@ -164,7 +174,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			// 如果有更多帖子，加载剩余的
 			if len(msg.Stream) > 0 {
 				m.postStreamLoading = true
-				return m, FetchPostStreamCmd(m.postTopicID, msg.Stream, m.cookie, m.userAgent)
+				return m, tea.Batch(FetchPostStreamCmd(m.postTopicID, msg.Stream, m.cookie, m.userAgent), m.spinner.Tick)
 			}
 		}
 		return m, nil
@@ -175,7 +185,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			// 链式加载：还有剩余则继续
 			if len(msg.Remaining) > 0 {
 				m.postStream = msg.Remaining
-				return m, FetchPostStreamCmd(msg.TopicID, msg.Remaining, m.cookie, m.userAgent)
+				return m, tea.Batch(FetchPostStreamCmd(msg.TopicID, msg.Remaining, m.cookie, m.userAgent), m.spinner.Tick)
 			}
 		}
 		m.postStream = nil
@@ -233,7 +243,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 					m.searchPage = 0
 					m.searchMore = false
 					m.searchLoadingMore = false
-					return FetchSearchCmd(val, m.cookie, m.userAgent, 1)
+					return tea.Batch(FetchSearchCmd(val, m.cookie, m.userAgent, 1), m.spinner.Tick)
 				}
 				if m.inputTarget == inputCookie {
 					// Cookie 输入完成，接着提示 User-Agent
@@ -250,6 +260,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				return tea.Batch(
 					FetchCategoriesCmd(m.cookie, m.userAgent),
 					ui.UpdateCfgCmd("linuxdoUserAgent", val),
+					m.spinner.Tick,
 				)
 			})
 			return m, cmd
@@ -329,7 +340,7 @@ func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
 				m.topPage++
 				m.topLoading = true
 				m.topErr = nil
-				return m, m.fetchCurrentTopics()
+				return m, tea.Batch(m.fetchCurrentTopics(), m.spinner.Tick)
 			}
 		}
 	case viewPosts:
@@ -347,7 +358,7 @@ func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
 			// 无限滚动：到底且有更多结果，加载下一页
 			if !m.searchLoadingMore && m.searchMore {
 				m.searchLoadingMore = true
-				return m, FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, m.searchPage+1)
+				return m, tea.Batch(FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, m.searchPage+1), m.spinner.Tick)
 			}
 		}
 	}
@@ -405,12 +416,12 @@ func (m *Model) enterSelected() (*Model, tea.Cmd) {
 		if m.catCursor == 0 {
 			m.topTitle = "Latest"
 			m.topCategory = 0
-			return m, FetchLatestTopicsCmd(0, m.cookie, m.userAgent)
+			return m, tea.Batch(FetchLatestTopicsCmd(0, m.cookie, m.userAgent), m.spinner.Tick)
 		}
 		cat := m.categories[m.catCursor-1]
 		m.topTitle = cat.Name
 		m.topCategory = cat.ID
-		return m, FetchCategoryTopicsCmd(cat.ID, 0, m.cookie, m.userAgent)
+		return m, tea.Batch(FetchCategoryTopicsCmd(cat.ID, 0, m.cookie, m.userAgent), m.spinner.Tick)
 	case viewTopics:
 		if len(m.topics) == 0 {
 			return m, nil
@@ -420,7 +431,7 @@ func (m *Model) enterSelected() (*Model, tea.Cmd) {
 		m.postTopicID = topic.ID
 		m.postLoading = true
 		m.postErr = nil
-		return m, FetchTopicDetailCmd(topic.ID, m.cookie, m.userAgent)
+		return m, tea.Batch(FetchTopicDetailCmd(topic.ID, m.cookie, m.userAgent), m.spinner.Tick)
 	case viewSearch:
 		if len(m.searchResults) == 0 {
 			return m, nil
@@ -430,7 +441,7 @@ func (m *Model) enterSelected() (*Model, tea.Cmd) {
 		m.postTopicID = result.TopicID
 		m.postLoading = true
 		m.postErr = nil
-		return m, FetchTopicDetailCmd(result.TopicID, m.cookie, m.userAgent)
+		return m, tea.Batch(FetchTopicDetailCmd(result.TopicID, m.cookie, m.userAgent), m.spinner.Tick)
 	}
 	return m, nil
 }
@@ -474,16 +485,16 @@ func (m *Model) refresh() (*Model, tea.Cmd) {
 	case viewCategories:
 		m.catLoading = true
 		m.catErr = nil
-		return m, FetchCategoriesCmd(m.cookie, m.userAgent)
+		return m, tea.Batch(FetchCategoriesCmd(m.cookie, m.userAgent), m.spinner.Tick)
 	case viewTopics:
 		m.topLoading = true
 		m.topErr = nil
-		return m, m.fetchCurrentTopics()
+		return m, tea.Batch(m.fetchCurrentTopics(), m.spinner.Tick)
 	case viewPosts:
 		if m.postTopicID > 0 {
 			m.postLoading = true
 			m.postErr = nil
-			return m, FetchTopicDetailCmd(m.postTopicID, m.cookie, m.userAgent)
+			return m, tea.Batch(FetchTopicDetailCmd(m.postTopicID, m.cookie, m.userAgent), m.spinner.Tick)
 		}
 	case viewSearch:
 		if m.searchQuery != "" {
@@ -492,14 +503,14 @@ func (m *Model) refresh() (*Model, tea.Cmd) {
 			m.searchPage = 0
 			m.searchMore = false
 			m.searchLoadingMore = false
-			return m, FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, 1)
+			return m, tea.Batch(FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, 1), m.spinner.Tick)
 		}
 	}
 	return m, nil
 }
 
 func (m *Model) View() string {
-	cardWidth := m.width - 2
+	cardWidth := m.width
 	if cardWidth < 40 {
 		cardWidth = 40
 	}
@@ -546,7 +557,7 @@ func (m *Model) View() string {
 
 func (m *Model) viewCategories(cardWidth int) string {
 	if m.catLoading {
-		return ui.Card("LinuxDo", lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⏳ Loading categories..."), ui.ColAccent, cardWidth)
+		return ui.Card("LinuxDo", lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View()+"  Loading categories..."), ui.ColAccent, cardWidth)
 	}
 	if m.catErr != nil {
 		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.catErr.Error()) + "\n"
@@ -601,7 +612,7 @@ func (m *Model) viewCategories(cardWidth int) string {
 
 func (m *Model) viewTopics(cardWidth int) string {
 	if m.topLoading {
-		return ui.Card(m.topTitle, lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⏳ Loading topics..."), ui.ColAccent, cardWidth)
+		return ui.Card(m.topTitle, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View()+"  Loading topics..."), ui.ColAccent, cardWidth)
 	}
 	if m.topErr != nil {
 		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.topErr.Error()) + "\n"
@@ -669,7 +680,7 @@ func (m *Model) viewTopics(cardWidth int) string {
 
 func (m *Model) viewPosts(cardWidth int) string {
 	if m.postLoading {
-		return ui.Card(m.postTitle, lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⏳ Loading posts..."), ui.ColAccent, cardWidth)
+		return ui.Card(m.postTitle, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View()+"  Loading posts..."), ui.ColAccent, cardWidth)
 	}
 	if m.postErr != nil {
 		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.postErr.Error()) + "\n"
@@ -725,7 +736,8 @@ func (m *Model) viewPosts(cardWidth int) string {
 
 	title := fmt.Sprintf("%s (%d posts)", m.postTitle, m.totalPosts)
 	if m.postStreamLoading {
-		title = fmt.Sprintf("%s (%d/%d posts)", m.postTitle, len(m.posts), m.totalPosts)
+		// 流式加载更多帖子时，标题显示加载动画 + 已加载数/总数
+		title = fmt.Sprintf("%s %s (%d/%d posts)", m.postTitle, m.spinner.View(), len(m.posts), m.totalPosts)
 	}
 	return ui.Card(title, visible, ui.ColAccent, cardWidth)
 }
@@ -734,7 +746,7 @@ func (m *Model) viewSearch(cardWidth int) string {
 	title := fmt.Sprintf("Search: %s", m.searchQuery)
 
 	if m.searchLoading {
-		return ui.Card(title, lipgloss.NewStyle().Foreground(ui.ColAccent).Render("🔍 Searching..."), ui.ColAccent, cardWidth)
+		return ui.Card(title, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View()+"  Searching..."), ui.ColAccent, cardWidth)
 	}
 	if m.searchErr != nil {
 		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.searchErr.Error()) + "\n"
@@ -821,7 +833,7 @@ func (m *Model) viewSearch(cardWidth int) string {
 	}
 	content := strings.TrimRight(sb.String(), "\n")
 	if m.searchLoadingMore {
-		content += "\n\n    " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render("🔍 Loading more...")
+		content += "\n\n    " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(m.spinner.View()+" Loading more...")
 	}
 	return ui.Card(cardTitle, content, ui.ColAccent, cardWidth)
 }

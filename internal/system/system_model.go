@@ -9,6 +9,7 @@ import (
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -36,11 +37,15 @@ type Model struct {
 	scroll   int
 	filter   string
 	input    component.InputModel
+
+	spinner spinner.Model // bubbles 加载动画
 }
 
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
-	return tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second))
+	m.spinner = spinner.New()
+	m.spinner.Spinner = spinner.Dot
+	return tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second), m.spinner.Tick)
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -65,6 +70,10 @@ func (m *Model) applyFilter() {
 
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case SysInfoMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
@@ -105,7 +114,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+r":
 			m.loading = true
 			m.err = nil
-			return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second))
+			return m, tea.Batch(FetchSystemInfoCmd(), FetchProcessesCmd(), SysTickCmd(2*time.Second), m.spinner.Tick)
 		case "/":
 			m.input.Prompt = "Filter:"
 			m.input.Open(m.filter)
@@ -129,7 +138,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
-	cardWidth := m.width - 2
+	cardWidth := m.width
 	if cardWidth < 40 {
 		cardWidth = 40
 	}
@@ -149,7 +158,7 @@ func (m *Model) View() string {
 
 	// 加载中
 	if m.loading {
-		content := lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⏳ Loading system info...")
+		content := lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View() + "  Loading system info...")
 		return ui.Card("System", content, ui.ColAccent, cardWidth)
 	}
 

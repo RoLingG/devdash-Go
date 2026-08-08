@@ -10,6 +10,7 @@ import (
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -73,6 +74,8 @@ type Model struct {
 	dirPath    string
 	dirList    component.ListModel
 
+	spinner spinner.Model // bubbles 加载动画
+
 	cachedInfo  Info
 	cachedMtime time.Time
 	cachedPath  string
@@ -105,7 +108,9 @@ func (m *Model) Init(defaultRepo string) tea.Cmd {
 		defaultRepo = "."
 	}
 	m.repoPath = defaultRepo
-	return LoadInfoFromDirCmd(defaultRepo)
+	m.spinner = spinner.New()
+	m.spinner.Spinner = spinner.Dot
+	return tea.Batch(LoadInfoFromDirCmd(defaultRepo), m.spinner.Tick)
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -116,6 +121,10 @@ func (m *Model) InputActive() bool { return m.input.Active }
 // Update 处理消息
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case InfoMsg:
 		m.info = Info(msg)
 		m.loaded = true
@@ -165,7 +174,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.dirListing = false
 				m.loading = true
 				m.err = nil
-				return m, tea.Batch(LoadInfoFromDirCmd(fullPath), ui.UpdateCfgCmd("repo", fullPath))
+				return m, tea.Batch(LoadInfoFromDirCmd(fullPath), ui.UpdateCfgCmd("repo", fullPath), m.spinner.Tick)
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Repository path:"
@@ -194,7 +203,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 								return nil
 							}
 							m.loading = true
-							return LoadInfoFromDirCmd(path)
+							return tea.Batch(LoadInfoFromDirCmd(path), m.spinner.Tick)
 						}
 						return ScanDirCmd(path)
 					}
@@ -203,7 +212,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 						return nil
 					}
 					m.loading = true
-					return LoadInfoFromDirCmd(filepath.Dir(path))
+					return tea.Batch(LoadInfoFromDirCmd(filepath.Dir(path)), m.spinner.Tick)
 				}),
 				ui.UpdateCfgCmd("repo", m.repoPath),
 			)
@@ -230,7 +239,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				}
 				m.loading = true
 				m.err = nil
-				return m, func() tea.Msg { return LoadInfoFromDir(m.repoPath) } // 缓存未命中
+				return m, tea.Batch(func() tea.Msg { return LoadInfoFromDir(m.repoPath) }, m.spinner.Tick) // 缓存未命中
 			}
 		}
 	}
@@ -239,7 +248,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 // View 渲染视图
 func (m *Model) View() string {
-	cardWidth := m.width - 2
+	cardWidth := m.width
 	if cardWidth < 40 {
 		cardWidth = 40
 	}
@@ -275,7 +284,7 @@ func (m *Model) View() string {
 
 	// 加载中
 	if m.loading {
-		loadingContent := lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  ⏳ Loading git info...")
+		loadingContent := lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View() + "  Loading git info...")
 		if m.repoPath != "" && m.repoPath != "." {
 			loadingContent += "\n\n" + lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  📂 "+m.repoPath)
 		}

@@ -9,6 +9,7 @@ import (
 
 	"cava_go/internal/ui"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -69,6 +70,8 @@ type Model struct {
 	addGateway  string
 	addMetric   string
 	addIfIdx    int // 当前选中的接口索引
+
+	spinner spinner.Model // bubbles 加载动画
 }
 
 // SetSavedRoutes 从 main.go 同步已保存的路由配置
@@ -83,7 +86,9 @@ type inputLike struct {
 func (m *Model) Init() tea.Cmd {
 	m.loading = true
 	m.isAdmin = IsAdmin()
-	return m.loadRoutesCmd()
+	m.spinner = spinner.New()
+	m.spinner.Spinner = spinner.Dot
+	return tea.Batch(m.loadRoutesCmd(), m.spinner.Tick)
 }
 
 func (m *Model) loadRoutesCmd() tea.Cmd {
@@ -103,6 +108,10 @@ func (m *Model) InputActive() bool { return m.input.Active || m.addOverlay }
 
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case RoutesMsg:
 		m.loading = false
 		m.loaded = true
@@ -151,7 +160,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+r":
 		m.loading = true
-		return m, m.loadRoutesCmd()
+		return m, tea.Batch(m.loadRoutesCmd(), m.spinner.Tick)
 
 	case "tab":
 		if m.mode == viewRoutes {
@@ -452,13 +461,13 @@ func (m *Model) loadSavedRoutes() (*Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
-	cardWidth := m.width - 2
+	cardWidth := m.width
 	if cardWidth < 40 {
 		cardWidth = 40
 	}
 
 	if m.loading {
-		return ui.Card("Route Manager", lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⏳ Loading..."), ui.ColAccent, cardWidth)
+		return ui.Card("Route Manager", lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View()+"  Loading..."), ui.ColAccent, cardWidth)
 	}
 
 	if m.addOverlay {

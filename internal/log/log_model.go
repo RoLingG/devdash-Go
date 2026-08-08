@@ -487,7 +487,7 @@ func (m *Model) applyFilter() {
 }
 
 func (m *Model) View() string {
-	cardWidth := m.width - 2
+	cardWidth := m.width
 	if cardWidth < 40 {
 		cardWidth = 40
 	}

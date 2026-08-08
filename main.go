@@ -1,7 +1,7 @@
 // ============================================================================
 // devdash — 开发者终端工具箱
 //
-// 7 个模块，数字键 1-7 切换，q 退出：
+// 8 个模块，数字键 1-8 切换，q 退出:
 //   [1] Git 可视化 — 分支图、提交历史、热文件、贡献者排行
 //   [2] 日志查看器 — 彩色高亮、正则过滤、错误统计
 //   [3] 天气面板   — ASCII 天气动画、7 天预报
@@ -37,12 +37,12 @@ import (
 type splashTickMsg struct{}
 
 // model 整个应用的顶层状态模型
-// Bubbletea 的核心：Model(数据) → Update(更新) → View(渲染)
+// Bubble tea 的核心: Model(数据) → Update(更新) → View(渲染)
 type model struct {
 	state       ui.TabState    // 当前激活的 Tab
 	width       int            // 终端宽度
 	height      int            // 终端高度
-	appCfg      *ui.AppConfig  // 应用持久化配置（指针，与 route 模块共享）
+	appCfg      *ui.AppConfig  // 应用持久化配置（与 route 模块共享）
 	cfgSaved    bool           // 配置是否已保存
 	helpOverlay bool           // 帮助面板是否展开
 	splashDone  bool           // 闪屏是否已结束
@@ -61,6 +61,15 @@ func (m model) anyInputActive() bool {
 	return m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() ||
 		m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() ||
 		m.routeMod.InputActive()
+}
+
+// updateForward 执行子模块 Update，把返回的非 nil cmd 追加进 cmds，返回更新后的模块。
+func updateForward[T any](mode T, msg tea.Msg, cmds []tea.Cmd, updateFunc func(T, tea.Msg) (T, tea.Cmd)) (T, []tea.Cmd) {
+	newMode, cmd := updateFunc(mode, msg)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return newMode, cmds
 }
 
 // Init 应用启动时执行的初始化命令
@@ -91,7 +100,7 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	// 配置变更消息：各模块在路径/城市变更时发送，此处同步到持久化配置
+	// 配置变更消息: 各模块在路径/城市变更时发送，此处同步到持久化配置
 	switch msg := msg.(type) {
 	case ui.CfgChangedMsg:
 		switch msg.Key {
@@ -223,110 +232,66 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// 跨模块消息：异步加载结果可能在用户切到其他 Tab 后才返回
+	// 跨模块消息: 异步加载结果可能在用户切到其他 Tab 后才返回
 	// 必须在顶层拦截，否则当前 Tab 的模块会丢弃这些消息
 	// crossHandled 标记已由跨模块路由处理的消息，避免重复转发给活跃模块
 	crossHandled := false
 	switch msg := msg.(type) {
 	case log.LoadMsg, log.DirMsg, log.TailDataMsg:
-		var cmd tea.Cmd
-		m.log, cmd = m.log.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.log, cmds = updateForward(m.log, msg, cmds, (*log.Model).Update)
 	case git.InfoMsg, git.DirMsg:
-		var cmd tea.Cmd
-		m.git, cmd = m.git.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
 	case config.LoadMsg, config.DirMsg:
-		var cmd tea.Cmd
-		m.config, cmd = m.config.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.config, cmds = updateForward(m.config, msg, cmds, (*config.Model).Update)
 	case system.SysInfoMsg, system.ProcMsg:
-		var cmd tea.Cmd
-		m.sys, cmd = m.sys.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.sys, cmds = updateForward(m.sys, msg, cmds, (*system.Model).Update)
 	case ports.PortsMsg:
-		var cmd tea.Cmd
-		m.ports, cmd = m.ports.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.ports, cmds = updateForward(m.ports, msg, cmds, (*ports.Model).Update)
 	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg, linuxdo.PostStreamMsg, linuxdo.SearchMsg:
-		var cmd tea.Cmd
-		m.linuxdo, cmd = m.linuxdo.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
 	case route.RoutesMsg, route.RouteActionMsg:
-		var cmd tea.Cmd
-		m.routeMod, cmd = m.routeMod.Update(msg)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 		crossHandled = true
+		m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
 	}
 
 	// 把消息转发给当前激活的子模块处理
 	// 跨模块消息已由上方处理，不再重复转发（避免 tea.Tick 等消息被处理两次导致指数累积）
 	if !crossHandled {
-	switch m.state {
-	case ui.TabGit:
-		var cmd tea.Cmd
-		m.git, cmd = m.git.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabLog:
-		var cmd tea.Cmd
-		m.log, cmd = m.log.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabWeather:
-		var cmd tea.Cmd
-		m.weather, cmd = m.weather.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabConfig:
-		var cmd tea.Cmd
-		m.config, cmd = m.config.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabSystem:
-		var cmd tea.Cmd
-		m.sys, cmd = m.sys.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabPorts:
-		var cmd tea.Cmd
-		m.ports, cmd = m.ports.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabLinuxDo:
-		var cmd tea.Cmd
-		m.linuxdo, cmd = m.linuxdo.Update(msg)
-		cmds = append(cmds, cmd)
-	case ui.TabRoute:
-		var cmd tea.Cmd
-		m.routeMod, cmd = m.routeMod.Update(msg)
-		cmds = append(cmds, cmd)
-	}
+		switch m.state {
+		case ui.TabGit:
+			m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
+		case ui.TabLog:
+			m.log, cmds = updateForward(m.log, msg, cmds, (*log.Model).Update)
+		case ui.TabWeather:
+			m.weather, cmds = updateForward(m.weather, msg, cmds, (*weather.Model).Update)
+		case ui.TabConfig:
+			m.config, cmds = updateForward(m.config, msg, cmds, (*config.Model).Update)
+		case ui.TabSystem:
+			m.sys, cmds = updateForward(m.sys, msg, cmds, (*system.Model).Update)
+		case ui.TabPorts:
+			m.ports, cmds = updateForward(m.ports, msg, cmds, (*ports.Model).Update)
+		case ui.TabLinuxDo:
+			m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
+		case ui.TabRoute:
+			m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
 // View 根据当前状态渲染整个界面
-// 布局：Tab 栏(顶部) + 模块内容(中间) + 状态栏(底部 2 行)
+// 布局: Tab 栏(顶部) + 模块内容(中间) + 状态栏(底部 2 行)
 func (m model) View() tea.View {
 	// 闪屏期间只渲染闪屏画面
 	if !m.splashDone {
-		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.0", 8))
+		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.1", 8))
 		v.AltScreen = true
 		return v
 	}
@@ -401,7 +366,7 @@ func main() {
 			case 1: // 加载持久化配置
 				appCfg = cm.GetConfig()
 			case 2: // 自定义配置（暂时也用默认，后续可扩展输入界面）
-				appCfg = ui.DefaultConfig()
+				appCfg = ui.DefaultConfig() // TODO: 出现系统文件选择框选择配置文件
 			}
 		}
 	} else {

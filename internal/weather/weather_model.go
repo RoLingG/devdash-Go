@@ -10,21 +10,23 @@ import (
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
 // Model 天气面板模块状态
 type Model struct {
-	data        *WttrResponse
-	width       int
-	height      int
-	loaded      bool
-	loading     bool
-	err         error
-	city   string
-	input  component.InputModel
-	scroll int
+	data    *WttrResponse
+	width   int
+	height  int
+	loaded  bool
+	loading bool
+	err     error
+	city    string
+	input   component.InputModel
+	scroll  int
+	spinner spinner.Model
 }
 
 func (m *Model) Init(defaultCity string) tea.Cmd {
@@ -32,8 +34,10 @@ func (m *Model) Init(defaultCity string) tea.Cmd {
 		defaultCity = "Beijing"
 	}
 	m.city = defaultCity
+	m.spinner = spinner.New()
+	m.spinner.Spinner = spinner.Dot
 	m.loading = true
-	return FetchFromCityCmd(defaultCity)
+	return tea.Batch(FetchFromCityCmd(defaultCity), m.spinner.Tick)
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
@@ -46,6 +50,10 @@ func (m *Model) InputActive() bool { return m.input.Active }
 
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case Msg:
 		if msg.Err != nil {
 			m.err = msg.Err
@@ -72,7 +80,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 						m.city = city
 						m.loading = true
 						m.err = nil
-						return FetchFromCityCmd(city)
+						return tea.Batch(FetchFromCityCmd(city), m.spinner.Tick)
 					}
 					return nil
 				}),
@@ -84,7 +92,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			if m.city != "" {
 				m.loading = true
 				m.err = nil
-				return m, FetchFromCityCmd(m.city)
+				return m, tea.Batch(FetchFromCityCmd(m.city), m.spinner.Tick)
 			}
 		case "/":
 			m.input.Prompt = "City:"
@@ -114,8 +122,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
+// View 渲染视图
 func (m *Model) View() string {
-	cardWidth := m.width - 2
+	cardWidth := m.width
 	if cardWidth < 40 {
 		cardWidth = 40
 	}
@@ -135,7 +144,7 @@ func (m *Model) View() string {
 
 	// 加载中
 	if m.loading {
-		loadingContent := lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⏳ Fetching...")
+		loadingContent := lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View() + " Fetching...")
 		if m.city != "" {
 			loadingContent = lipgloss.NewStyle().Foreground(ui.ColSecondary).Render("📍 "+m.city) + "\n\n" + loadingContent
 		}
