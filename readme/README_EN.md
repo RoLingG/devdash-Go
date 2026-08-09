@@ -65,6 +65,7 @@ After selecting configuration, a splash screen (ASCII Logo + version info) is di
 | Hotkey | Function |
 |--------|----------|
 | `1` `2` `3` `4` `5` `6` `7` `8` | Switch modules |
+| `Ctrl+←` / `Ctrl+→` | Cycle through modules (wraps around) |
 | `?` | Help panel (shows current module hotkeys) |
 | `Ctrl+S` | Save configuration |
 | `Ctrl+T` | Toggle dark/light theme |

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"cava_go/internal/config"
@@ -229,6 +230,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = ui.TabRoute
 			}
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
+		case "ctrl+right":
+			if m.anyInputActive() {
+				break
+			}
+			m.state = m.state.Next()
+			return m, func() tea.Msg { return tea.RequestWindowSize() }
+		case "ctrl+left":
+			if m.anyInputActive() {
+				break
+			}
+			m.state = m.state.Prev()
+			return m, func() tea.Msg { return tea.RequestWindowSize() }
 		}
 	}
 
@@ -237,12 +250,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// crossHandled 标记已由跨模块路由处理的消息，避免重复转发给活跃模块
 	crossHandled := false
 	switch msg := msg.(type) {
-	case log.LoadMsg, log.DirMsg, log.TailDataMsg:
-		crossHandled = true
-		m.log, cmds = updateForward(m.log, msg, cmds, (*log.Model).Update)
 	case git.InfoMsg, git.DirMsg:
 		crossHandled = true
 		m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
+	case log.LoadMsg, log.DirMsg, log.TailDataMsg:
+		crossHandled = true
+		m.log, cmds = updateForward(m.log, msg, cmds, (*log.Model).Update)
+	case weather.Msg:
+		crossHandled = true
+		m.weather, cmds = updateForward(m.weather, msg, cmds, (*weather.Model).Update)
 	case config.LoadMsg, config.DirMsg:
 		crossHandled = true
 		m.config, cmds = updateForward(m.config, msg, cmds, (*config.Model).Update)
@@ -258,6 +274,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case route.RoutesMsg, route.RouteActionMsg:
 		crossHandled = true
 		m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
+	// 接收跨模块 bubbles spinner 的加载 Msg
+	case spinner.TickMsg:
+		crossHandled = true
+		m.weather, cmds = updateForward(m.weather, msg, cmds, (*weather.Model).Update)
+		m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
+		m.ports, cmds = updateForward(m.ports, msg, cmds, (*ports.Model).Update)
+		m.sys, cmds = updateForward(m.sys, msg, cmds, (*system.Model).Update)
+		m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
+		m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
 	}
 
 	// 把消息转发给当前激活的子模块处理

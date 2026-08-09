@@ -33,7 +33,7 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabLog: {
-			{"↑↓", "cursor in page"}, {"Home/End", "first/last"}, {"[ ]", "prev/next page"},
+			{"↑↓", "cursor in page"}, {"Home/End", "first/last"}, {"←/→", "prev/next page"},
 			{"ctrl+↑/↓", "fast ±10 pages"}, {"ctrl+p", "jump to page"},
 			{"/", "open path"}, {"type", "filter"}, {"ctrl+l", "level filter"},
 			{"ctrl+u", "clear filter"}, {"ctrl+f", "follow mode"},

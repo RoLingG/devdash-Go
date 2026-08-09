@@ -109,6 +109,9 @@ func (m *Model) InputActive() bool { return m.input.Active || m.addOverlay }
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd

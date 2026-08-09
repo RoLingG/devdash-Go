@@ -43,6 +43,9 @@ func (m *Model) InputActive() bool { return m.input.Active }
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
@@ -132,7 +135,7 @@ func (m *Model) View() string {
 
 	// 错误
 	if m.err != nil {
-		content := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.err.Error())
+		content := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ " + m.err.Error())
 		return ui.Card("Ports", content, ui.ColRed, cardWidth)
 	}
 

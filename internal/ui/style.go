@@ -95,6 +95,25 @@ const (
 	TabRoute
 )
 
+// tabCount 当前 Tab 总数
+const tabCount = TabRoute + 1
+
+// Next 循环切换到下一个 Tab，到末尾回到第一个
+func (t TabState) Next() TabState {
+	if t < tabCount-1 {
+		return t + 1
+	}
+	return 0
+}
+
+// Prev 循环切换到上一个 Tab，到开头回到最后一个
+func (t TabState) Prev() TabState {
+	if t > 0 {
+		return t - 1
+	}
+	return tabCount - 1
+}
+
 // StyleTabActive 激活状态下的 Tab 样式
 func StyleTabActive() lipgloss.Style {
 	return lipgloss.NewStyle().
