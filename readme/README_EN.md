@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) | **English** | [繁體中文](README_TW.md)
 
-A terminal dashboard based on [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) framework, integrating 8 practical modules with numeric key quick switching, nano-style dual-line status bar, and `?` key help panel.
+A terminal dashboard based on [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) framework, integrating 9 practical modules with numeric key quick switching, nano-style dual-line status bar, and `?` key help panel.
 
 ## Features
 
@@ -16,6 +16,7 @@ A terminal dashboard based on [Bubble Tea v2](https://github.com/charmbracelet/b
 | `6` | Port Scanner | Preset development ports scanning, custom ports, concurrent scanning, status display |
 | `7` | LinuxDo Forum | Category browsing, topic list, topic details, infinite scrolling, Cookie authentication |
 | `8` | Route Manager | Cross-platform routing table (Windows/macOS), add/delete static routes, network interface info, persistence |
+| `9` | DevTools Toolbox | Base16/32/64/62/85/91 encode/decode, URL encoding, MD5/SHA hashing, multi-layer decode (offline pure functions, zero dependencies) |
 
 ## Installation & Running
 
@@ -64,7 +65,7 @@ After selecting configuration, a splash screen (ASCII Logo + version info) is di
 
 | Hotkey | Function |
 |--------|----------|
-| `1` `2` `3` `4` `5` `6` `7` `8` | Switch modules |
+| `1` `2` `3` `4` `5` `6` `7` `8` `9` | Switch modules |
 | `Ctrl+←` / `Ctrl+→` | Cycle through modules (wraps around) |
 | `?` | Help panel (shows current module hotkeys) |
 | `Ctrl+S` | Save configuration |
@@ -148,6 +149,15 @@ After selecting configuration, a splash screen (ASCII Logo + version info) is di
 - `Ctrl+R` - Refresh
 - `Esc` - Close overlay
 
+### DevTools Toolbox Module (`9`)
+- `↑` `↓` / `k` `j` - Select tool
+- `Home` / `End` - Jump to first/last tool
+- `/` - Input text to process
+- `PgUp` / `PgDn` - Scroll output result
+- `Ctrl+R` - Recalculate current tool
+- `Ctrl+U` - Clear input/result
+- `Esc` - Close input box
+
 ## Project Structure
 
 ```
@@ -187,11 +197,14 @@ cava_go/
 │   ├── linuxdo/                   # LinuxDo forum module
 │   │   ├── linuxdo_data.go        # Data types, Discourse API requests, HTML→plain text
 │   │   └── linuxdo_model.go       # Model + Init/Update/View (three-level view)
-│   └── route/                     # Route manager module
+│   ├── route/                     # Route manager module
 │       ├── route_types.go         # Shared types (RouteEntry, IfaceInfo, IfaceAddr) + GetInterfaces()
 │       ├── route_model.go         # Model + Init/Update/View (cross-platform shared)
 │       ├── route_data_windows.go  # Win32 API implementation (//go:build windows)
 │       └── route_data_darwin.go   # netstat + route implementation (//go:build darwin)
+│   └── devtools/                  # DevTools Toolbox
+│       ├── devtools_data.go       # 23 built-in tools (Base/URL/Hash/Multi) + hand-written base62/base91
+│       └── devtools_model.go      # Model + Init/Update/View (pure sync, two-column layout)
 └──
 ```
 

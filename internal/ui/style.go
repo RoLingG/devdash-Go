@@ -93,10 +93,11 @@ const (
 	TabPorts
 	TabLinuxDo
 	TabRoute
+	TabDevTools
 )
 
 // tabCount 当前 Tab 总数
-const tabCount = TabRoute + 1
+const tabCount = TabDevTools + 1
 
 // Next 循环切换到下一个 Tab，到末尾回到第一个
 func (t TabState) Next() TabState {

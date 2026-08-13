@@ -2,7 +2,7 @@
 
 **简体中文** | [English](readme/README_EN.md) | [繁體中文](readme/README_TW.md)
 
-一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 8 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
+一个基于 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的终端仪表盘，集成 9 个实用模块，数字键快速切换，nano 风格双行状态栏，`?` 键呼出帮助面板。
 
 ## 功能模块
 
@@ -16,6 +16,7 @@
 | `6` | 端口扫描 | 预设开发端口扫描、自定义端口、并发扫描、状态显示 |
 | `7` | LinuxDo 论坛 | 分类浏览、帖子列表、帖子详情、无限滚动、Cookie 认证 |
 | `8` | 路由管理 | 跨平台路由表（Windows/macOS）、添加/删除静态路由、网卡信息、持久化 |
+| `9` | DevTools 工具箱 | Base16/32/64/62/85/91 编码解码、URL 编码、SHA 全系/MD5 哈希、校验和、HMAC、多层解码、JWT 解码、进制转换、Unix 时间戳、Unicode 转义、文本统计、UUID v4、AES-256 加解密（离线纯函数，零依赖） |
 
 ## 安装与运行
 
@@ -64,7 +65,7 @@ cat app.log | ./devdash.exe
 
 | 快捷键 | 功能 |
 |--------|------|
-| `1` `2` `3` `4` `5` `6` `7` `8` | 切换模块 |
+| `1` `2` `3` `4` `5` `6` `7` `8` `9` | 切换模块 |
 | `Ctrl+←` / `Ctrl+→` | 循环切换模块（首尾循环） |
 | `?` | 帮助面板（显示当前模块快捷键） |
 | `Ctrl+S` | 保存配置 |
@@ -148,6 +149,15 @@ cat app.log | ./devdash.exe
 - `Ctrl+R` - 刷新
 - `Esc` - 关闭 overlay
 
+### DevTools 工具箱模块 (`9`)
+- `↑` `↓` / `k` `j` - 选择工具
+- `Home` / `End` - 跳转首/末工具
+- `/` - 输入待处理文本
+- `PgUp` / `PgDn` - 滚动输出结果
+- `Ctrl+R` - 重新计算当前工具
+- `Ctrl+U` - 清空输入/结果
+- `Esc` - 关闭输入框
+
 ## 项目结构
 
 ```
@@ -187,11 +197,14 @@ cava_go/
 │   ├── linuxdo/                   # LinuxDo 论坛模块
 │   │   ├── linuxdo_data.go        # 数据类型、Discourse API 请求、HTML→纯文本
 │   │   └── linuxdo_model.go       # Model + Init/Update/View（三级视图）
-│   └── route/                     # 路由管理模块
+│   ├── route/                     # 路由管理模块
 │       ├── route_types.go         # 共享类型（RouteEntry、IfaceInfo、IfaceAddr）+ GetInterfaces()
 │       ├── route_model.go         # Model + Init/Update/View（跨平台共享）
 │       ├── route_data_windows.go  # Win32 API 实现（//go:build windows）
 │       └── route_data_darwin.go   # netstat + route 实现（//go:build darwin）
+│   └── devtools/                  # DevTools 工具箱模块
+│       ├── devtools_data.go       # 41 个内置工具（Base/URL/Hash/Checksum/HMAC/Multi/Tools/Encrypt）+ 手写 base62/base91 算法
+│       └── devtools_model.go      # Model + Init/Update/View（纯同步，双列布局）
 └──
 ```
 

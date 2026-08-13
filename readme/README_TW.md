@@ -2,7 +2,7 @@
 
 [简体中文](../README.md) | [English](README_EN.md) | **繁體中文**
 
-一個基於 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的終端儀表板，整合 8 個實用模組，數字鍵快速切換，nano 風格雙行狀態列，`?` 鍵呼出說明面板。
+一個基於 [Bubble Tea v2](https://github.com/charmbracelet/bubbletea) 框架的終端儀表板，整合 9 個實用模組，數字鍵快速切換，nano 風格雙行狀態列，`?` 鍵呼出說明面板。
 
 ## 功能模組
 
@@ -16,6 +16,7 @@
 | `6` | 埠號掃描 | 預設開發埠號掃描、自訂埠號、並行掃描、狀態顯示 |
 | `7` | LinuxDo 論壇 | 分類瀏覽、主題清單、主題詳情、無限捲動、Cookie 驗證 |
 | `8` | 路由管理 | 跨平台路由表（Windows/macOS）、新增/刪除靜態路由、網路介面資訊、持久化 |
+| `9` | DevTools 工具箱 | Base16/32/64/62/85/91 編碼解碼、URL 編碼、MD5/SHA 雜湊、多層解碼（離線純函式，零依賴） |
 
 ## 安裝與執行
 
@@ -64,7 +65,7 @@ cat app.log | ./devdash.exe
 
 | 快捷鍵 | 功能 |
 |--------|------|
-| `1` `2` `3` `4` `5` `6` `7` `8` | 切換模組 |
+| `1` `2` `3` `4` `5` `6` `7` `8` `9` | 切換模組 |
 | `Ctrl+←` / `Ctrl+→` | 循環切換模組（首尾循環） |
 | `?` | 說明面板（顯示目前模組快捷鍵） |
 | `Ctrl+S` | 儲存設定 |
@@ -148,6 +149,15 @@ cat app.log | ./devdash.exe
 - `Ctrl+R` - 重新整理
 - `Esc` - 關閉 overlay
 
+### DevTools 工具箱模組 (`9`)
+- `↑` `↓` / `k` `j` - 選擇工具
+- `Home` / `End` - 跳轉首/末工具
+- `/` - 輸入待處理文字
+- `PgUp` / `PgDn` - 捲動輸出結果
+- `Ctrl+R` - 重新計算目前工具
+- `Ctrl+U` - 清空輸入/結果
+- `Esc` - 關閉輸入框
+
 ## 專案結構
 
 ```
@@ -187,11 +197,14 @@ cava_go/
 │   ├── linuxdo/                   # LinuxDo 論壇模組
 │   │   ├── linuxdo_data.go        # 資料類型、Discourse API 請求、HTML→純文字
 │   │   └── linuxdo_model.go       # Model + Init/Update/View（三級檢視）
-│   └── route/                     # 路由管理模組
+│   ├── route/                     # 路由管理模組
 │       ├── route_types.go         # 共享類型（RouteEntry、IfaceInfo、IfaceAddr）+ GetInterfaces()
 │       ├── route_model.go         # Model + Init/Update/View（跨平台共享）
 │       ├── route_data_windows.go  # Win32 API 實作（//go:build windows）
 │       └── route_data_darwin.go   # netstat + route 實作（//go:build darwin）
+│   └── devtools/                  # DevTools 工具箱模組
+│       ├── devtools_data.go       # 23 個內建工具（Base/URL/Hash/Multi）+ 手寫 base62/base91 演算法
+│       └── devtools_model.go      # Model + Init/Update/View（純同步，雙欄版面配置）
 └──
 ```
 

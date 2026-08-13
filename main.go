@@ -1,7 +1,7 @@
 // ============================================================================
 // devdash — 开发者终端工具箱
 //
-// 8 个模块，数字键 1-8 切换，q 退出:
+// 9 个模块，数字键 1-9 切换，q 退出:
 //   [1] Git 可视化 — 分支图、提交历史、热文件、贡献者排行
 //   [2] 日志查看器 — 彩色高亮、正则过滤、错误统计
 //   [3] 天气面板   — ASCII 天气动画、7 天预报
@@ -10,6 +10,7 @@
 //   [6] 端口扫描   — 常用端口状态检测
 //   [7] LinuxDo   — linux.do 论坛浏览
 //   [8] Route     — 路由管理（静态路由增删查）
+//   [9] DevTools  — 编码/哈希工具箱（Base 系列、URL、Hash、多层解码）
 // ============================================================================
 
 package main
@@ -24,6 +25,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"cava_go/internal/config"
+	"cava_go/internal/devtools"
 	"cava_go/internal/git"
 	"cava_go/internal/linuxdo"
 	"cava_go/internal/log"
@@ -55,13 +57,14 @@ type model struct {
 	ports       *ports.Model   // 端口扫描子模块
 	linuxdo     *linuxdo.Model // LinuxDo 论坛子模块
 	routeMod    *route.Model   // 路由管理子模块
+	devtools    *devtools.Model // DevTools 编码/哈希工具箱子模块
 }
 
 // anyInputActive 检查是否有模块的输入框正在接收输入
 func (m model) anyInputActive() bool {
 	return m.git.InputActive() || m.log.InputActive() || m.weather.InputActive() ||
 		m.config.InputActive() || m.sys.InputActive() || m.ports.InputActive() || m.linuxdo.InputActive() ||
-		m.routeMod.InputActive()
+		m.routeMod.InputActive() || m.devtools.InputActive()
 }
 
 // updateForward 执行子模块 Update，把返回的非 nil cmd 追加进 cmds，返回更新后的模块。
@@ -93,6 +96,7 @@ func (m model) Init() tea.Cmd {
 		m.ports.Init(),
 		m.linuxdo.Init(m.appCfg.LinuxDoCookie, m.appCfg.LinuxDoUserAgent),
 		m.routeMod.Init(),
+		m.devtools.Init(), // 纯同步模块，Init 只初始化工具列表
 	)
 }
 
@@ -150,6 +154,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ports.UpdateSize(msg.Width, msg.Height)
 		m.linuxdo.UpdateSize(msg.Width, msg.Height)
 		m.routeMod.UpdateSize(msg.Width, msg.Height) // [修复] 之前漏掉了 route 模块的尺寸同步
+		m.devtools.UpdateSize(msg.Width, msg.Height)
 		return m, nil
 
 	case splashTickMsg:
@@ -207,7 +212,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.helpOverlay = true
 			return m, nil
 		// 数字键切换 Tab，输入框活跃时透传给当前模块
-		case "1", "2", "3", "4", "5", "6", "7", "8":
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 			if m.anyInputActive() {
 				break // 透传给模块处理
 			}
@@ -228,6 +233,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = ui.TabLinuxDo
 			case "8":
 				m.state = ui.TabRoute
+			case "9":
+				m.state = ui.TabDevTools
 			}
 			return m, func() tea.Msg { return tea.RequestWindowSize() }
 		case "ctrl+right":
@@ -305,6 +312,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
 		case ui.TabRoute:
 			m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
+		case ui.TabDevTools:
+			m.devtools, cmds = updateForward(m.devtools, msg, cmds, (*devtools.Model).Update)
 		}
 	}
 
@@ -316,7 +325,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() tea.View {
 	// 闪屏期间只渲染闪屏画面
 	if !m.splashDone {
-		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.1", 8))
+		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.1", 9))
 		v.AltScreen = true
 		return v
 	}
@@ -342,6 +351,8 @@ func (m model) View() tea.View {
 		content = m.linuxdo.View()
 	case ui.TabRoute:
 		content = m.routeMod.View()
+	case ui.TabDevTools:
+		content = m.devtools.View()
 	}
 
 	// 帮助面板覆盖在主内容上
@@ -413,6 +424,7 @@ func main() {
 		ports:    &ports.Model{},
 		linuxdo:  &linuxdo.Model{},
 		routeMod: &route.Model{},
+		devtools: &devtools.Model{},
 	}
 	p3 := tea.NewProgram(m)
 	if _, err := p3.Run(); err != nil {

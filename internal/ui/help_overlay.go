@@ -16,20 +16,21 @@ type HelpItem struct {
 // RenderHelpOverlay 渲染帮助面板（居中卡片）
 func RenderHelpOverlay(active TabState, width, height int) string {
 	title := map[TabState]string{
-		TabGit:     "Git 快捷键",
-		TabLog:     "Log 快捷键",
-		TabWeather: "Weather 快捷键",
-		TabConfig:  "Config 快捷键",
-		TabSystem:  "System 快捷键",
-		TabPorts:   "Ports 快捷键",
-		TabLinuxDo: "LinuxDo 快捷键",
-		TabRoute:   "Route 快捷键",
+		TabGit:      "Git 快捷键",
+		TabLog:      "Log 快捷键",
+		TabWeather:  "Weather 快捷键",
+		TabConfig:   "Config 快捷键",
+		TabSystem:   "System 快捷键",
+		TabPorts:    "Ports 快捷键",
+		TabLinuxDo:  "LinuxDo 快捷键",
+		TabRoute:    "Route 快捷键",
+		TabDevTools: "DevTools 快捷键",
 	}
 
 	items := map[TabState][]HelpItem{
 		TabGit: {
 			{"↑/↓", "scroll commits"}, {"Home/End", "first/last"}, {"/", "change repo"}, {"ctrl+r", "refresh"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabLog: {
@@ -37,44 +38,51 @@ func RenderHelpOverlay(active TabState, width, height int) string {
 			{"ctrl+↑/↓", "fast ±10 pages"}, {"ctrl+p", "jump to page"},
 			{"/", "open path"}, {"type", "filter"}, {"ctrl+l", "level filter"},
 			{"ctrl+u", "clear filter"}, {"ctrl+f", "follow mode"},
-			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"ctrl+r", "refresh"}, {"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabWeather: {
 			{"↑/↓", "scroll content"}, {"Home/End", "first/last"}, {"/", "change city"}, {"ctrl+r", "refresh"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabConfig: {
 			{"↑/↓", "move cursor"}, {"Home/End", "first/last"}, {"enter", "toggle node"}, {"/", "open file"},
 			{"ctrl+r", "refresh"}, {"type", "search filter"}, {"ctrl+n/b", "next/prev match"},
 			{"ctrl+u", "clear search"}, {"ctrl+e", "expand all"}, {"ctrl+w", "collapse all"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+s", "save config"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabSystem: {
 			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"tab", "switch view"}, {"/", "filter process"},
 			{"ctrl+r", "refresh"}, {"ctrl+u", "clear filter"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabPorts: {
 			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"/", "add port"},
 			{"ctrl+r", "rescan"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabLinuxDo: {
 			{"↑/↓", "scroll"}, {"^ctrl+↑/↓", "scroll ±10"}, {"Home/End", "first/last"}, {"enter", "open topic"},
 			{"/", "set cookie"}, {"ctrl+f", "search"}, {"ctrl+r", "refresh"},
 			{"ctrl+u", "clear cookie"}, {"?", "toggle help"}, {"Esc", "back/close"},
-			{"1-8", "switch tab"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
+			{"1-9", "switch tab"}, {"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 		TabRoute: {
 			{"↑/↓", "scroll"}, {"Home/End", "first/last"}, {"Tab", "interfaces"},
 			{"ctrl+d", "delete route"}, {"ctrl+a", "add route"}, {"ctrl+r", "refresh"},
 			{"ctrl+s", "save routes"}, {"ctrl+l", "load routes"},
-			{"?", "toggle help"}, {"Esc", "close"}, {"1-8", "switch tab"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
+			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
+		},
+		TabDevTools: {
+			{"↑/↓", "select tool"}, {"Home/End", "first/last tool"}, {"Tab/⇧Tab", "switch section"},
+			{"/", "input text"}, {"pgup/pgdn", "scroll output"}, {"ctrl+r", "recalculate"},
+			{"ctrl+u", "clear input/result"},
+			{"?", "toggle help"}, {"Esc", "close"}, {"1-9", "switch tab"},
 			{"ctrl+t", "toggle theme"}, {"ctrl+q", "quit"},
 		},
 	}

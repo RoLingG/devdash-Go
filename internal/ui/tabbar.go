@@ -8,7 +8,7 @@ import (
 
 // RenderTabBar 渲染顶部 Tab 栏
 func RenderTabBar(active TabState, width int) string {
-	labels := []string{"1:Git", "2:Log", "3:Weather", "4:Config", "5:System", "6:Ports", "7:LinuxDo", "8:Route"}
+	labels := []string{"1:Git", "2:Log", "3:Weather", "4:Config", "5:System", "6:Ports", "7:LinuxDo", "8:Route", "9:DevTools"}
 	var parts []string
 	for i, label := range labels {
 		if TabState(i) == active {
@@ -68,22 +68,27 @@ func RenderStatusBar(active TabState, width int) string {
 
 	case TabSystem:
 		line1 := helpLine([]string{"↑/↓ Scroll", "Tab Switch", "/ Filter", "^R Refresh"}, width, sep)
-		line2 := helpLine([]string{"^U Clear", "? Help", "1-8 Tab", "^Q Quit"}, width, sep)
+		line2 := helpLine([]string{"^U Clear", "? Help", "1-9 Tab", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabPorts:
 		line1 := helpLine([]string{"↑/↓ Scroll", "/ Add Port", "^R Refresh", "? Help"}, width, sep)
-		line2 := helpLine([]string{"1-8 Tab", "^Q Quit"}, width, sep)
+		line2 := helpLine([]string{"1-9 Tab", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabLinuxDo:
 		line1 := helpLine([]string{"↑/↓ Scroll", "^↑/↓ ±10", "Enter Open", "Esc Back"}, width, sep)
-		line2 := helpLine([]string{"1-8 Tab", "^Q Quit", "/ Cookie", "^F Search", "^R Refresh"}, width, sep)
+		line2 := helpLine([]string{"1-9 Tab", "^Q Quit", "/ Cookie", "^F Search", "^R Refresh"}, width, sep)
 		return line1 + "\n" + line2
 
 	case TabRoute:
 		line1 := helpLine([]string{"↑/↓ Scroll", "Home/End", "^A Add Route", "^D Delete", "^S Save"}, width, sep)
-		line2 := helpLine([]string{"1-8 Tab", "Tab Ifaces", "^R Refresh", "^L Load", "^Q Quit"}, width, sep)
+		line2 := helpLine([]string{"1-9 Tab", "Tab Ifaces", "^R Refresh", "^L Load", "^Q Quit"}, width, sep)
+		return line1 + "\n" + line2
+
+	case TabDevTools:
+		line1 := helpLine([]string{"↑/↓ Tool", "Tab Switch", "/ Input", "PgUp/Dn Out"}, width, sep)
+		line2 := helpLine([]string{"1-9 Tab", "^R Recalc", "^U Clear", "? Help", "^Q Quit"}, width, sep)
 		return line1 + "\n" + line2
 	}
 	return ""
