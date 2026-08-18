@@ -156,6 +156,7 @@ cat app.log | ./devdash.exe
 - `PgUp` / `PgDn` - 滚动输出结果
 - `Ctrl+R` - 重新计算当前工具
 - `Ctrl+U` - 清空输入/结果
+- `Ctrl+P` - 复制当前结果到剪贴板
 - `Esc` - 关闭输入框
 
 ## 项目结构

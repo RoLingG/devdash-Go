@@ -343,7 +343,6 @@ func renderPercent(pct float64) string {
 }
 
 // colorForPercent 根据百分比返回颜色
-// 修改: lipgloss v2 中颜色类型改为标准库 image/color.Color
 func colorForPercent(pct float64) color.Color {
 	if pct >= 90 {
 		return ui.ColRed

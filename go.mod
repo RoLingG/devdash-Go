@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.7
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/BurntSushi/toml v1.6.0
+	github.com/atotto/clipboard v0.1.4
 	github.com/shirou/gopsutil/v4 v4.26.5
 	golang.org/x/sys v0.46.0
 	gopkg.in/yaml.v3 v3.0.1

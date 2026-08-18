@@ -42,21 +42,21 @@ type splashTickMsg struct{}
 // model 整个应用的顶层状态模型
 // Bubble tea 的核心: Model(数据) → Update(更新) → View(渲染)
 type model struct {
-	state       ui.TabState    // 当前激活的 Tab
-	width       int            // 终端宽度
-	height      int            // 终端高度
-	appCfg      *ui.AppConfig  // 应用持久化配置（与 route 模块共享）
-	cfgSaved    bool           // 配置是否已保存
-	helpOverlay bool           // 帮助面板是否展开
-	splashDone  bool           // 闪屏是否已结束
-	git         *git.Model     // Git 可视化子模块
-	log         *log.Model     // 日志查看器子模块
-	weather     *weather.Model // 天气面板子模块
-	config      *config.Model  // 配置浏览器子模块
-	sys         *system.Model  // 系统监控子模块
-	ports       *ports.Model   // 端口扫描子模块
-	linuxdo     *linuxdo.Model // LinuxDo 论坛子模块
-	routeMod    *route.Model   // 路由管理子模块
+	state       ui.TabState     // 当前激活的 Tab
+	width       int             // 终端宽度
+	height      int             // 终端高度
+	appCfg      *ui.AppConfig   // 应用持久化配置（与 route 模块共享）
+	cfgSaved    bool            // 配置是否已保存
+	helpOverlay bool            // 帮助面板是否展开
+	splashDone  bool            // 闪屏是否已结束
+	git         *git.Model      // Git 可视化子模块
+	log         *log.Model      // 日志查看器子模块
+	weather     *weather.Model  // 天气面板子模块
+	config      *config.Model   // 配置浏览器子模块
+	sys         *system.Model   // 系统监控子模块
+	ports       *ports.Model    // 端口扫描子模块
+	linuxdo     *linuxdo.Model  // LinuxDo 论坛子模块
+	routeMod    *route.Model    // 路由管理子模块
 	devtools    *devtools.Model // DevTools 编码/哈希工具箱子模块
 }
 
@@ -153,7 +153,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sys.UpdateSize(msg.Width, msg.Height)
 		m.ports.UpdateSize(msg.Width, msg.Height)
 		m.linuxdo.UpdateSize(msg.Width, msg.Height)
-		m.routeMod.UpdateSize(msg.Width, msg.Height) // [修复] 之前漏掉了 route 模块的尺寸同步
+		m.routeMod.UpdateSize(msg.Width, msg.Height) // 同步 route 模块尺寸
 		m.devtools.UpdateSize(msg.Width, msg.Height)
 		return m, nil
 
@@ -325,7 +325,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() tea.View {
 	// 闪屏期间只渲染闪屏画面
 	if !m.splashDone {
-		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.1.1", 9))
+		v := tea.NewView(ui.RenderSplash(m.width, m.height, "v0.2.0", 9))
 		v.AltScreen = true
 		return v
 	}

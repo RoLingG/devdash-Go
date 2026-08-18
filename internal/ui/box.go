@@ -22,7 +22,6 @@ func Box(title, content string, width int) string {
 }
 
 // Card 创建一个带边框的卡片
-// 修改: lipgloss v2 中颜色参数类型改为标准库 image/color.Color
 func Card(title, content string, borderColor color.Color, width int) string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).

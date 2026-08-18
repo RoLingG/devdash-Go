@@ -749,7 +749,6 @@ func wrapLine(s string, maxW int) []string {
 }
 
 func colorizeLog(l Line, filter string) string {
-	// 修改: lipgloss v2 中颜色类型改为标准库 image/color.Color
 	var color color.Color
 	switch l.Level {
 	case "ERROR":

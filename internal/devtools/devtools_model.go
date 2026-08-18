@@ -4,12 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"cava_go/internal/component"
 	"cava_go/internal/ui"
 
+	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/atotto/clipboard"
 )
+
+// httpResultMsg 异步 HTTP 请求完成消息，携带 reqID 用于丢弃过期响应
+type httpResultMsg struct {
+	reqID  int
+	result string
+	err    error
+}
 
 // Model DevTools 开发工具箱模块状态
 type Model struct {
@@ -19,12 +28,16 @@ type Model struct {
 	visible    []Tool // 当前功能区的工具子集
 	section    int    // 当前功能区索引
 	cursor     int    // 工具列表光标
-	input      component.InputModel
+	input      textarea.Model
+	recentIdx  int      // 输入框历史浏览索引，-1 表示未浏览
 	inputValue string   // 已确认的输入文本
 	recent     []string // 会话内最近输入记录
 	result     string   // 当前工具计算结果
 	resultErr  error    // 当前工具计算错误
 	outScroll  int      // 输出滚动偏移
+	copied     bool     // ctrl+p 复制成功提示
+	loading    bool     // 异步工具（HTTP）请求进行中
+	reqID      int      // 递增请求号，用于丢弃过期异步响应
 }
 
 // Init 初始化工具列表
@@ -33,42 +46,64 @@ func (m *Model) Init() tea.Cmd {
 		m.tools = builtinTools
 	}
 	m.visible = toolsInSection(m.tools, sections[m.section])
+	m.initTextarea()
 	return nil
+}
+
+// initTextarea 初始化多行输入框（bubbles textarea）
+// 说明: 原 component.InputModel 仅支持单行，无法满足 HTTP/HMAC/AES 的多行输入格式
+func (m *Model) initTextarea() {
+	ta := textarea.New()
+	ta.SetValue("")
+	ta.ShowLineNumbers = false
+	ta.Prompt = ""
+	ta.Placeholder = ""
+	m.input = ta
 }
 
 func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
 // InputActive 输入框是否活跃
-func (m *Model) InputActive() bool { return m.input.Active }
+func (m *Model) InputActive() bool { return m.input.Focused() }
 
 func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case httpResultMsg:
+		// 只接受最新请求的响应，过期响应（reqID 不匹配）直接丢弃
+		if msg.reqID != m.reqID {
+			return m, nil
+		}
+		m.loading = false
+		m.result, m.resultErr = msg.result, msg.err
+		return m, nil
 	case tea.PasteMsg:
-		if m.input.Active {
-			return m, m.input.Update(msg, m.onSubmit)
+		if m.input.Focused() {
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			return m, cmd
 		}
 	case tea.KeyPressMsg:
-		if m.input.Active {
-			return m, m.input.Update(msg, m.onSubmit)
+		if m.input.Focused() {
+			return m, m.handleInputKey(msg)
 		}
+		var cmd tea.Cmd
 		switch msg.String() {
 		case "up", "k":
-			m.moveCursor(-1)
+			cmd = m.moveCursor(-1)
 		case "down", "j":
-			m.moveCursor(1)
+			cmd = m.moveCursor(1)
 		case "home":
 			m.cursor = 0
-			m.compute()
+			cmd = m.compute()
 		case "end":
 			m.cursor = len(m.visible) - 1
-			m.compute()
+			cmd = m.compute()
 		case "tab":
-			m.switchSection(1)
+			cmd = m.switchSection(1)
 		case "shift+tab":
-			m.switchSection(-1)
+			cmd = m.switchSection(-1)
 		case "/":
-			m.input.Prompt = "Text:"
-			m.input.Open("")
+			m.openInput("")
 		case "pgup":
 			m.outScroll -= 5
 		case "pgdown":
@@ -77,43 +112,114 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			if m.inputValue == "" && m.isNoInput() {
 				m.result, m.resultErr = "", nil // 清缓存，强制重新生成（如 UUID）
 			}
-			m.compute()
+			cmd = m.compute()
 		case "ctrl+u":
 			m.clear()
+		case "ctrl+p":
+			cmd = m.copyResult() // 复制当前结果到剪贴板
 		}
+		return m, cmd
 	}
 	return m, nil
 }
 
-// onSubmit 确认输入并重算，非空输入记入最近列表
-func (m *Model) onSubmit(value string) func() tea.Msg {
+// handleInputKey 处理输入框活跃时的按键
+// ctrl+o 提交、esc 取消、ctrl+↑↓ 浏览最近记录，其余交给 textarea
+func (m *Model) handleInputKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "ctrl+o":
+		return m.submitInput()
+	case "esc":
+		m.cancelInput()
+		return nil
+	case "ctrl+up":
+		m.cycleRecent(-1)
+		return nil
+	case "ctrl+down":
+		m.cycleRecent(1)
+		return nil
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return cmd
+}
+
+// openInput 打开多行输入框，可选预填内容
+func (m *Model) openInput(prefill string) tea.Cmd {
+	m.initTextarea()
+	if prefill != "" {
+		m.input.SetValue(prefill)
+	}
+	m.recentIdx = -1
+	return m.input.Focus()
+}
+
+// submitInput 确认输入并重算；非空输入记入最近列表
+func (m *Model) submitInput() tea.Cmd {
+	value := strings.TrimSpace(m.input.Value())
+	m.input.Blur()
+	m.recentIdx = -1
 	m.inputValue = value
 	if value != "" {
 		m.recent = ui.AddToRecent(m.recent, value, 10)
-		m.input.SetRecent(m.recent)
 	}
-	m.compute()
-	return nil
+	return m.compute()
 }
 
-// compute 用当前输入重算当前工具结果
-func (m *Model) compute() {
+// cancelInput 取消输入：关闭输入框但不改动已确认的 inputValue
+func (m *Model) cancelInput() {
+	m.input.Blur()
+	m.recentIdx = -1
+}
+
+// cycleRecent 用 ctrl+↑↓ 循环浏览最近记录并预填输入框
+func (m *Model) cycleRecent(delta int) {
+	n := len(m.recent)
+	if n == 0 {
+		return
+	}
+	m.recentIdx += delta
+	if m.recentIdx < 0 {
+		m.recentIdx = n - 1
+	}
+	if m.recentIdx >= n {
+		m.recentIdx = 0
+	}
+	m.input.SetValue(m.recent[m.recentIdx])
+}
+
+// compute 用当前输入重算当前工具结果；对异步工具返回启动命令
+func (m *Model) compute() tea.Cmd {
 	m.outScroll = 0
+	m.copied = false // 结果已变化，清除复制提示
 	if m.cursor >= len(m.visible) {
 		m.result, m.resultErr = "", nil
-		return
+		return nil
 	}
 	t := m.visible[m.cursor]
 	if m.inputValue == "" {
 		if !t.NoInput { // 普通工具空输入不计算
 			m.result, m.resultErr = "", nil
-			return
+			return nil
 		}
 		if m.result != "" { // NoInput 工具结果已生成则跳过，避免移动光标反复生成
-			return
+			return nil
+		}
+	}
+	// 异步工具：登记 loading + 递增请求号，在 goroutine 中执行，完成后发 httpResultMsg
+	if t.Async {
+		m.loading = true
+		m.result, m.resultErr = "", nil
+		m.reqID++
+		id := m.reqID
+		input := m.inputValue
+		return func() tea.Msg {
+			res, err := t.Run(input)
+			return httpResultMsg{reqID: id, result: res, err: err}
 		}
 	}
 	m.result, m.resultErr = t.Run(m.inputValue)
+	return nil
 }
 
 // clear 清空输入与结果
@@ -121,10 +227,25 @@ func (m *Model) clear() {
 	m.inputValue = ""
 	m.result, m.resultErr = "", nil
 	m.outScroll = 0
+	m.loading = false // 异步请求进行中则一并取消（过期响应会被 reqID 丢弃）
+	m.copied = false  // 清空时清除复制提示
+}
+
+// copyResult 复制当前工具结果到剪贴板（ctrl+p）
+// 复制内存中的 m.result，不受屏幕换行/布局影响；请求中或空结果时静默跳过
+func (m *Model) copyResult() tea.Cmd {
+	m.copied = false
+	if m.loading || m.result == "" {
+		return nil
+	}
+	if err := clipboard.WriteAll(m.result); err == nil {
+		m.copied = true
+	}
+	return nil
 }
 
 // switchSection 切换功能区并重置光标
-func (m *Model) switchSection(delta int) {
+func (m *Model) switchSection(delta int) tea.Cmd {
 	total := len(sections)
 	m.section += delta
 	if m.section < 0 {
@@ -135,14 +256,14 @@ func (m *Model) switchSection(delta int) {
 	}
 	m.visible = toolsInSection(m.tools, sections[m.section])
 	m.cursor = 0
-	m.compute()
+	return m.compute()
 }
 
 // moveCursor 移动工具光标并自动重算
-func (m *Model) moveCursor(delta int) {
+func (m *Model) moveCursor(delta int) tea.Cmd {
 	total := len(m.visible)
 	if total == 0 {
-		return
+		return nil
 	}
 	m.cursor += delta
 	if m.cursor < 0 {
@@ -151,7 +272,7 @@ func (m *Model) moveCursor(delta int) {
 	if m.cursor >= total {
 		m.cursor = total - 1
 	}
-	m.compute()
+	return m.compute()
 }
 
 // isNoInput 当前工具是否无需输入
@@ -165,17 +286,17 @@ func (m *Model) View() string {
 		cardWidth = 40
 	}
 
-	// 输入框打开时渲染输入卡片
-	if m.input.Active {
-		return ui.RenderInputCard(ui.InputCardOpts{
-			Title:       "DevTools",
-			Prompt:      m.input.Prompt,
-			Value:       m.input.Value,
-			Cursor:      m.input.Cursor,
-			CardWidth:   cardWidth,
-			RecentItems: m.input.RecentItems,
-			RecentIdx:   m.input.RecentIdx(),
-		})
+	// 输入框打开时渲染多行输入卡片（textarea 自带光标/滚动/多行编辑）
+	if m.input.Focused() {
+		m.input.SetWidth(cardWidth - 4) // 卡片边框 2 + 左右 padding 2
+		taH := m.height - 7
+		if taH < 3 {
+			taH = 3
+		}
+		m.input.SetHeight(taH - 2) // 底部预留快捷键提示行
+		content := m.input.View()
+		hint := lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  ctrl+o 提交 · esc 取消 · ctrl+↑↓ 最近记录")
+		return ui.Card("DevTools", content+"\n"+hint, ui.ColAccent, cardWidth)
 	}
 
 	contentH := m.height - 7
@@ -290,15 +411,27 @@ func (m *Model) View() string {
 	}
 	right = append(right, "")
 
-	right = append(right, lipgloss.NewStyle().Bold(true).Foreground(ui.ColPrimary).Render("Output"))
+	// Output 标题附加 ctrl+p 复制提示；复制成功后显示绿色"✓ 已复制"
+	outTitle := lipgloss.NewStyle().Bold(true).Foreground(ui.ColPrimary).Render("Output")
+	if m.copied {
+		outTitle += lipgloss.NewStyle().Foreground(ui.ColGreen).Render("  ✓ 已复制")
+	} else {
+		outTitle += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  ctrl+p 复制")
+	}
+	right = append(right, outTitle)
 	switch {
-	case m.resultErr != nil:
-		right = append(right, lipgloss.NewStyle().Foreground(ui.ColRed).Render("  ✗ "+m.resultErr.Error()))
+	case m.loading: // 异步工具请求进行中
+		right = append(right, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  ⏳ sending…"))
 	case m.inputValue == "" && !m.isNoInput():
 		right = append(right, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  (empty)"))
 	default:
-		// 输出按右列宽度自动换行
-		outLines := strings.Split(lipgloss.NewStyle().Width(rightW-2).Render(m.result), "\n")
+		outText := m.result
+		outColor := ui.ColText
+		if m.resultErr != nil {
+			outText, outColor = m.resultErr.Error(), ui.ColRed
+		}
+		// 幂等 wrapLong：只硬切超宽单行，避免对 Run 端已分段结果二次切出空行
+		outLines := strings.Split(lipgloss.NewStyle().Width(rightW-2).Render(wrapLong(outText)), "\n")
 		avail := contentH - len(right)
 		if avail < 1 {
 			avail = 1
@@ -318,8 +451,16 @@ func (m *Model) View() string {
 			right = append(right, lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
 				fmt.Sprintf("  [pgup/pgdn %d-%d/%d]", m.outScroll+1, outEnd, total)))
 		}
-		for _, l := range outLines[m.outScroll:outEnd] {
-			right = append(right, "  "+l)
+		for i, l := range outLines[m.outScroll:outEnd] {
+			pre := "  "
+			if m.resultErr != nil {
+				if m.outScroll+i == 0 {
+					pre = "  ✗ " // 错误只标文本第一行
+				} else {
+					pre = "    " // 续行对齐
+				}
+			}
+			right = append(right, lipgloss.NewStyle().Foreground(outColor).Render(pre+l))
 		}
 	}
 	for len(right) < contentH {

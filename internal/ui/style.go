@@ -8,8 +8,7 @@ import (
 
 // ---- 主题系统 ----
 
-// Theme 包含所有可切换的颜色值
-// 修改: lipgloss v2 中 Color 从字符串类型变为函数, 字段类型改用标准库 image/color.Color
+// Theme 包含所有可切换的颜色值（lipgloss v2 中 Color 是函数，字段用标准库 image/color.Color）
 type Theme struct {
 	Primary   color.Color
 	Secondary color.Color
@@ -24,7 +23,6 @@ type Theme struct {
 }
 
 var darkTheme = Theme{
-	// 修改: v2 中 color.Color 是接口类型, 需用 lipgloss.Color() 函数把字符串转成具体颜色
 	Primary: lipgloss.Color("205"), Secondary: lipgloss.Color("62"), Accent: lipgloss.Color("226"),
 	Text: lipgloss.Color("252"), Muted: lipgloss.Color("243"), Green: lipgloss.Color("82"), Red: lipgloss.Color("196"), Blue: lipgloss.Color("39"),
 	BgDark: lipgloss.Color("235"), BgMid: lipgloss.Color("237"),

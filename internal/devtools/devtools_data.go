@@ -10,6 +10,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/tls"
 	"encoding/ascii85"
 	"encoding/base32"
 	"encoding/base64"
@@ -20,8 +21,12 @@ import (
 	"hash/crc32"
 	"hash/crc64"
 	"hash/fnv"
+	"io"
 	"math/big"
+	"net/http"
 	"net/url"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +39,7 @@ type Tool struct {
 	Group   string // 区内分组：Base / URL / Multi
 	Name    string
 	NoInput bool   // 无需输入即可运行
+	Async   bool   // 异步执行：耗时操作（如 HTTP），结果通过消息返回
 	Hint    string // 空输入时的格式提示（多参数工具用）
 	Run     func(input string) (string, error)
 }
@@ -223,6 +229,27 @@ var builtinTools = []Tool{
 			return "", err
 		}
 		return aesDecrypt(key, strings.TrimSpace(data))
+	}},
+
+	// ---- HTTP 接口测试与安全检查（异步执行）----
+	{Section: SectionTools, Group: "HTTP", Name: "HTTP Request", Async: true,
+		Hint: "第一行 METHOD URL，随后 Header 行，空行后 Body", Run: func(s string) (string, error) {
+			return httpRequest(s)
+		}},
+	{Section: SectionTools, Group: "HTTP", Name: "HTTP Response Audit", Async: true,
+		Hint: "同 HTTP Request 格式", Run: func(s string) (string, error) {
+			return httpAudit(s)
+		}},
+
+	// ---- HTTP 开发辅助（同步）----
+	{Section: SectionTools, Group: "HTTP", Name: "Curl 转请求", Run: func(s string) (string, error) {
+		return curlParse(s)
+	}},
+	{Section: SectionTools, Group: "Auth", Name: "JWT 验签", Hint: "第一行密钥，第二行 token", Run: func(s string) (string, error) {
+		return jwtVerify(s)
+	}},
+	{Section: SectionTools, Group: "HTTP", Name: "HTTP Status Lookup", Run: func(s string) (string, error) {
+		return httpStatusLookup(s)
 	}},
 }
 
@@ -501,7 +528,7 @@ func escapeCtl(s string) string {
 	for i := 0; i < len(s); i++ {
 		switch c := s[i]; {
 		case c == '\n' || c == '\t':
-			b.WriteByte(c) // 换行/制表是正常文本结构，保留
+			b.WriteByte(c)
 		case c < 0x20 || c == 0x7f:
 			fmt.Fprintf(&b, "\\x%02X", c)
 		default:
@@ -521,22 +548,30 @@ func truncate(s string) string {
 	return string(r[:max]) + "…"
 }
 
-// wrapLong 长字符串按固定字符数换行，防超宽折行覆盖状态栏
+// wrapLong 按已有换行拆行，仅硬切超过 step 字符的行（幂等：重复调用不二次插换行）
 func wrapLong(s string) string {
 	const step = 64
-	r := []rune(s)
-	var b strings.Builder
-	for i := 0; i < len(r); i += step {
-		if i > 0 {
-			b.WriteByte('\n')
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		r := []rune(l)
+		if len(r) <= step {
+			continue // 短行/已分段的行，原样保留
 		}
-		end := i + step
-		if end > len(r) {
-			end = len(r)
+		// 超长单行：按 step 个字符硬切，段间插 \n
+		var b strings.Builder
+		for j := 0; j < len(r); j += step {
+			if j > 0 {
+				b.WriteByte('\n')
+			}
+			end := j + step
+			if end > len(r) {
+				end = len(r)
+			}
+			b.WriteString(string(r[j:end]))
 		}
-		b.WriteString(string(r[i:end]))
+		lines[i] = b.String()
 	}
-	return b.String()
+	return strings.Join(lines, "\n")
 }
 
 // ---- Tools 区 ----
@@ -666,7 +701,6 @@ func unixTimeConvert(s string) (string, error) {
 	if body == "" {
 		return "", fmt.Errorf("输入为空")
 	}
-	// 纯数字 → 当作 Unix 时间戳，按位数自动识别秒/毫秒/微秒
 	if n, err := strconv.ParseInt(body, 10, 64); err == nil {
 		unit, t := "seconds", time.Unix(n, 0)
 		switch {
@@ -678,7 +712,7 @@ func unixTimeConvert(s string) (string, error) {
 		return fmt.Sprintf("unix %s: %d\nutc:   %s\nlocal: %s",
 			unit, n, t.UTC().Format("2006-01-02 15:04:05"), t.Local().Format("2006-01-02 15:04:05")), nil
 	}
-	// 日期字符串 → 按常见格式解析为本地时间
+	// 按常见格式解析为本地时间
 	formats := []string{
 		"2006-01-02 15:04:05",
 		"2006-01-02 15:04",
@@ -803,8 +837,9 @@ func aesDecrypt(passphrase, in string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(raw) < gcm.NonceSize() {
-		return "", fmt.Errorf("密文过短")
+	if len(raw) < gcm.NonceSize()+gcm.Overhead() {
+		// 过短多为把密文直接粘贴、第一行被误当密钥；提示最小长度与格式
+		return "", fmt.Errorf("密文过短（至少 %d 个 hex 字符；确认第一行是密钥，第二行起是密文）", (gcm.NonceSize()+gcm.Overhead())*2)
 	}
 	nonce, sealed := raw[:gcm.NonceSize()], raw[gcm.NonceSize():]
 	plain, err := gcm.Open(nil, nonce, sealed, nil)
@@ -812,4 +847,439 @@ func aesDecrypt(passphrase, in string) (string, error) {
 		return "", fmt.Errorf("解密失败（密钥错误或密文被篡改）：%v", err)
 	}
 	return string(plain), nil
+}
+
+// ---- HTTP 接口测试与安全检查 ----
+
+// httpReq 解析后的 HTTP 请求参数
+type httpReq struct {
+	method  string   // GET/POST/...
+	url     string   // 目标地址
+	headers []string // "Key: Value" 行
+	body    string   // 请求体
+}
+
+// parseHTTPInput 解析 "METHOD URL\nKey: Value\n\nbody" 格式
+func parseHTTPInput(s string) (httpReq, error) {
+	var req httpReq
+	lines := strings.Split(s, "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return req, fmt.Errorf("第一行需为 METHOD URL")
+	}
+	fields := strings.Fields(strings.TrimSpace(lines[0]))
+	if len(fields) == 1 {
+		req.method, req.url = "GET", fields[0]
+	} else {
+		req.method = strings.ToUpper(fields[0])
+		req.url = fields[1]
+	}
+	if req.url == "" {
+		return req, fmt.Errorf("缺少 URL")
+	}
+	if !validHTTPMethod(req.method) {
+		return req, fmt.Errorf("不支持的请求方法 %q", req.method)
+	}
+	u, err := url.Parse(req.url)
+	if err != nil {
+		return req, fmt.Errorf("URL 无效：%v", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return req, fmt.Errorf("URL 需带 http:// 或 https:// 协议前缀")
+	}
+	// 剩余行：含 ":" 视为 Header，其余视为 Body（宽容：漏空行也能识别 body）
+	inBody := false
+	for i := 1; i < len(lines); i++ {
+		ln := strings.TrimRight(lines[i], "\r")
+		if strings.TrimSpace(ln) == "" {
+			inBody = true
+			continue
+		}
+		if !inBody && strings.Contains(ln, ":") {
+			req.headers = append(req.headers, ln)
+		} else {
+			inBody = true
+			req.body += ln + "\n"
+		}
+	}
+	req.body = strings.TrimSuffix(req.body, "\n")
+	return req, nil
+}
+
+// validHTTPMethod 判断是否为常见 HTTP 方法
+func validHTTPMethod(m string) bool {
+	switch m {
+	case "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS":
+		return true
+	}
+	return false
+}
+
+// httpClient 带超时的共享客户端，避免 DNS/连接挂死阻塞事件循环
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+// httpResponse 请求结果（响应体 + 排序后的展示头 + TLS 状态）
+type httpResponse struct {
+	status  string               // "200 OK"
+	header  http.Header          // 原始响应头（用于 Audit 取单头）
+	headers []string             // 排序后的 "K: V" 展示行
+	body    string               // 响应体
+	tls     *tls.ConnectionState // 仅 https 时非 nil
+}
+
+// headerValue 取单个响应头值
+func (r httpResponse) headerValue(name string) string { return r.header.Get(name) }
+
+// doHTTP 执行请求并读取完整响应（响应体限制 1MB，超长截断）
+func doHTTP(req httpReq) (httpResponse, error) {
+	var body io.Reader
+	if req.body != "" {
+		body = strings.NewReader(req.body)
+	}
+	hreq, err := http.NewRequest(req.method, req.url, body)
+	if err != nil {
+		return httpResponse{}, err
+	}
+	for _, h := range req.headers {
+		if k, v, ok := strings.Cut(h, ":"); ok {
+			hreq.Header.Set(strings.TrimSpace(k), strings.TrimSpace(v))
+		}
+	}
+	resp, err := httpClient.Do(hreq)
+	if err != nil {
+		return httpResponse{}, err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return httpResponse{}, err
+	}
+	var out httpResponse
+	out.status, out.header, out.body, out.tls = resp.Status, resp.Header, string(data), resp.TLS
+	names := make([]string, 0, len(resp.Header))
+	for k := range resp.Header {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		for _, v := range resp.Header.Values(k) {
+			out.headers = append(out.headers, k+": "+v)
+		}
+	}
+	return out, nil
+}
+
+// httpRequest 发起请求并格式化状态行 / 响应头 / 响应体
+func httpRequest(s string) (string, error) {
+	req, err := parseHTTPInput(s)
+	if err != nil {
+		return "", err
+	}
+	resp, err := doHTTP(req)
+	if err != nil {
+		return "", fmt.Errorf("请求失败：%v", err)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s\n→ %s\n", req.method, req.url, resp.status)
+	for _, h := range resp.headers {
+		fmt.Fprintf(&b, "%s\n", h)
+	}
+	if resp.body != "" {
+		b.WriteString("\n")
+		r := []rune(resp.body)
+		if len(r) > 4000 {
+			r = r[:4000]
+		}
+		b.WriteString(escapeCtl(wrapLong(string(r)))) // 控制字符转义 + 长内容换行
+	}
+	return b.String(), nil
+}
+
+// secretPatterns 响应体敏感数据泄露关键词正则
+var secretPatterns = []struct {
+	re   *regexp.Regexp
+	desc string
+}{
+	{regexp.MustCompile(`(?i)password["'\s:=]+[^\s"']{4,}`), "密码字段"},
+	{regexp.MustCompile(`(?i)api[_-]?key["'\s:=]+[^\s"']{8,}`), "API Key"},
+	{regexp.MustCompile(`(?i)authorization["'\s:=]+[^\s"']{8,}`), "授权头"},
+	{regexp.MustCompile(`(?i)bearer\s+[a-z0-9._-]{10,}`), "Bearer Token"},
+	{regexp.MustCompile(`(?i)secret["'\s:=]+[^\s"']{8,}`), "机密字段"},
+	{regexp.MustCompile(`(?i)token["'\s:=]+[^\s"']{8,}`), "Token"},
+}
+
+// httpAudit 发起请求并做安全检查：TLS 证书 / 安全 Header / CORS / 敏感数据泄露
+func httpAudit(s string) (string, error) {
+	req, err := parseHTTPInput(s)
+	if err != nil {
+		return "", err
+	}
+	resp, err := doHTTP(req)
+	if err != nil {
+		return "", fmt.Errorf("请求失败：%v", err)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s → %s\n", req.method, req.url, resp.status)
+
+	// TLS 证书检查（仅 https）
+	if resp.tls != nil && len(resp.tls.PeerCertificates) > 0 {
+		cert := resp.tls.PeerCertificates[0]
+		now := time.Now()
+		switch {
+		case now.After(cert.NotAfter):
+			fmt.Fprintf(&b, "[✗] TLS 证书已过期（%s）\n", cert.NotAfter.Format("2006-01-02"))
+		case now.Before(cert.NotBefore):
+			fmt.Fprintf(&b, "[✗] TLS 证书尚未生效（%s）\n", cert.NotBefore.Format("2006-01-02"))
+		default:
+			fmt.Fprintf(&b, "[✓] TLS 证书有效（%s ~ %s，签发 %s）\n",
+				cert.NotBefore.Format("2006-01-02"), cert.NotAfter.Format("2006-01-02"), cert.Issuer)
+		}
+	} else {
+		fmt.Fprintf(&b, "[⚠] 非 HTTPS，未检查 TLS 证书\n")
+	}
+
+	// 安全响应头缺失检查
+	secHeaders := []struct{ name, desc string }{
+		{"Strict-Transport-Security", "HSTS 强制 HTTPS"},
+		{"Content-Security-Policy", "CSP 内容安全策略"},
+		{"X-Content-Type-Options", "防 MIME 嗅探"},
+		{"X-Frame-Options", "防点击劫持"},
+		{"Referrer-Policy", "Referrer 策略"},
+	}
+	for _, h := range secHeaders {
+		if v := resp.headerValue(h.name); v != "" {
+			fmt.Fprintf(&b, "[✓] %s: %s\n", h.name, truncate(v))
+		} else {
+			fmt.Fprintf(&b, "[✗] 缺失 %s（%s）\n", h.name, h.desc)
+		}
+	}
+
+	// CORS 宽松警告
+	if v := resp.headerValue("Access-Control-Allow-Origin"); v == "*" {
+		fmt.Fprintf(&b, "[⚠] CORS 允许所有来源（Access-Control-Allow-Origin: *）\n")
+	}
+
+	// 响应体敏感数据泄露扫描（仅提示存在性，不打印泄露内容）
+	for _, p := range secretPatterns {
+		if m := p.re.FindString(resp.body); m != "" {
+			fmt.Fprintf(&b, "[⚠] 响应体疑似泄露 %s（命中 %q）\n", p.desc, truncate(m))
+		}
+	}
+	return b.String(), nil
+}
+
+// shellSplit 按 shell 规则切分参数，支持单/双引号与 \ 转义
+func shellSplit(s string) ([]string, error) {
+	var args []string
+	var cur strings.Builder
+	var quote byte
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if escaped {
+			cur.WriteByte(c)
+			escaped = false
+			continue
+		}
+		switch {
+		case c == '\\' && quote != '\'': // 单引号内反斜杠为字面量
+			escaped = true
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			} else {
+				cur.WriteByte(c)
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == ' ' || c == '\t' || c == '\n':
+			if cur.Len() > 0 {
+				args = append(args, cur.String())
+				cur.Reset()
+			}
+		default:
+			cur.WriteByte(c)
+		}
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("引号未闭合")
+	}
+	if cur.Len() > 0 {
+		args = append(args, cur.String())
+	}
+	return args, nil
+}
+
+// curlParse 解析 curl 命令为 METHOD URL/Header/Body 标准格式
+func curlParse(s string) (string, error) {
+	args, err := shellSplit(s)
+	if err != nil {
+		return "", err
+	}
+	if len(args) == 0 || args[0] != "curl" {
+		return "", fmt.Errorf("输入需以 curl 开头")
+	}
+	var method, u, user string
+	var headers, datas []string
+	for i := 1; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "-X", "--request":
+			if i+1 < len(args) {
+				method = args[i+1]
+				i++
+			}
+		case "-H", "--header":
+			if i+1 < len(args) {
+				headers = append(headers, args[i+1])
+				i++
+			}
+		case "-d", "--data", "--data-raw", "--data-ascii", "--data-urlencode":
+			if i+1 < len(args) {
+				datas = append(datas, args[i+1])
+				i++
+			}
+		case "-u", "--user":
+			if i+1 < len(args) {
+				user = args[i+1]
+				i++
+			}
+		case "-o", "--output": // 后跟文件名，需跳过
+			if i+1 < len(args) {
+				i++
+			}
+		case "-O", "--remote-name", "-i", "--include", "-s", "--silent", "-S", "--show-error",
+			"-v", "--verbose", "-L", "--location", "-k", "--insecure", "-g", "--globoff",
+			"--compressed", "-A", "--user-agent", "-e", "--referer", "-b", "--cookie", "-c", "--cookie-jar":
+			// 展示/输出/重定向类 flag，忽略
+		default:
+			if strings.HasPrefix(a, "-") && a != "-" {
+				continue // 未知 flag 忽略
+			}
+			if u == "" {
+				u = a
+			}
+		}
+	}
+	if u == "" {
+		return "", fmt.Errorf("未找到 URL")
+	}
+	if method == "" {
+		if len(datas) > 0 {
+			method = "POST"
+		} else {
+			method = "GET"
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s\n", method, u)
+	for _, h := range headers {
+		fmt.Fprintf(&b, "%s\n", h)
+	}
+	if user != "" {
+		// user:pass → Authorization Basic
+		fmt.Fprintf(&b, "Authorization: Basic %s\n", base64.StdEncoding.EncodeToString([]byte(user)))
+	}
+	if len(datas) > 0 {
+		b.WriteString("\n")
+		b.WriteString(strings.Join(datas, "&"))
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+// jwtVerify 验签 JWT（仅支持 HS256）：第一行密钥，第二行 token
+func jwtVerify(s string) (string, error) {
+	key, token, err := splitKeyData(s)
+	if err != nil {
+		return "", err
+	}
+	token = strings.TrimSpace(token)
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("JWT 需要 header.payload.signature 三段")
+	}
+	headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", fmt.Errorf("header 解码失败：%v", err)
+	}
+	var head struct {
+		Alg string `json:"alg"`
+	}
+	if err := json.Unmarshal(headerJSON, &head); err != nil {
+		return "", fmt.Errorf("header JSON 解析失败：%v", err)
+	}
+	if head.Alg != "HS256" {
+		return "", fmt.Errorf("仅支持 HS256 验签，当前 alg=%s", head.Alg)
+	}
+	// 用密钥重算签名并与 token 携带的签名比较（常数时间，防时序攻击）
+	mac := hmac.New(sha256.New, []byte(key))
+	mac.Write([]byte(parts[0] + "." + parts[1]))
+	want := mac.Sum(nil)
+	got, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return "", fmt.Errorf("signature 解码失败：%v", err)
+	}
+	valid := hmac.Equal(want, got)
+
+	headerOut, _ := formatJSON(string(headerJSON))
+	payloadJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("payload 解码失败：%v", err)
+	}
+	payloadOut, _ := formatJSON(string(payloadJSON))
+
+	mark := "[✓] signature valid"
+	if !valid {
+		mark = "[✗] signature invalid"
+	}
+	return fmt.Sprintf("header:\n%s\n\npayload:\n%s\n\n%s", headerOut, payloadOut, mark), nil
+}
+
+// httpStatusTable 常用状态码描述
+var httpStatusTable = map[int]string{
+	100: "Continue", 101: "Switching Protocols",
+	200: "OK", 201: "Created", 202: "Accepted", 203: "Non-Authoritative Information",
+	204: "No Content", 205: "Reset Content", 206: "Partial Content",
+	300: "Multiple Choices", 301: "Moved Permanently", 302: "Found", 303: "See Other",
+	304: "Not Modified", 307: "Temporary Redirect", 308: "Permanent Redirect",
+	400: "Bad Request", 401: "Unauthorized", 402: "Payment Required", 403: "Forbidden",
+	404: "Not Found", 405: "Method Not Allowed", 406: "Not Acceptable", 407: "Proxy Authentication Required",
+	408: "Request Timeout", 409: "Conflict", 410: "Gone", 411: "Length Required",
+	412: "Precondition Failed", 413: "Payload Too Large", 414: "URI Too Long",
+	415: "Unsupported Media Type", 416: "Range Not Satisfiable", 417: "Expectation Failed",
+	418: "I'm a teapot", 421: "Misdirected Request", 422: "Unprocessable Entity",
+	425: "Too Early", 426: "Upgrade Required", 428: "Precondition Required",
+	429: "Too Many Requests", 431: "Request Header Fields Too Large",
+	451: "Unavailable For Legal Reasons",
+	500: "Internal Server Error", 501: "Not Implemented", 502: "Bad Gateway",
+	503: "Service Unavailable", 504: "Gateway Timeout", 505: "HTTP Version Not Supported",
+}
+
+// httpStatusLookup 状态码 → 描述与分类
+func httpStatusLookup(s string) (string, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 100 || n > 599 {
+		return "", fmt.Errorf("无效状态码 %q（需为 100-599 数字）", strings.TrimSpace(s))
+	}
+	desc, ok := httpStatusTable[n]
+	if !ok {
+		if t := http.StatusText(n); t != "" {
+			desc = t
+		} else {
+			desc = "Unknown"
+		}
+	}
+	var category string
+	switch n / 100 {
+	case 1:
+		category = "信息"
+	case 2:
+		category = "成功"
+	case 3:
+		category = "重定向"
+	case 4:
+		category = "客户端错误"
+	case 5:
+		category = "服务器错误"
+	}
+	return fmt.Sprintf("%d %s\n%dxx %s", n, desc, n/100, category), nil
 }

@@ -5,7 +5,12 @@ package devtools
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -359,5 +364,232 @@ func TestAESInvalidInput(t *testing.T) {
 	// 过短密文报错（不足 nonce 长度）
 	if _, err := aesDecrypt("key", "abcd"); err == nil {
 		t.Error("aesDecrypt should reject too-short ciphertext")
+	}
+}
+
+// ---- HTTP 接口测试与安全检查 ----
+
+// makeHS256Token 构造由密钥签名的 HS256 JWT（验签测试用）
+func makeHS256Token(secret, payloadJSON string) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(payloadJSON))
+	signing := header + "." + payload
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signing))
+	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func TestParseHTTPInput(t *testing.T) {
+	// 单 URL → GET 默认
+	r, err := parseHTTPInput("https://example.com")
+	if err != nil || r.method != "GET" || r.url != "https://example.com" {
+		t.Fatalf("single URL should default to GET: %+v err=%v", r, err)
+	}
+	// POST + Header + Body
+	r, err = parseHTTPInput("POST https://example.com\nContent-Type: application/json\nX-A: b\n\n{\"a\":1}")
+	if err != nil || r.method != "POST" || len(r.headers) != 2 || r.body != `{"a":1}` {
+		t.Fatalf("method/header/body split failed: %+v err=%v", r, err)
+	}
+	// 宽容：header 后漏空行，无冒号行归 body
+	r, err = parseHTTPInput("POST https://example.com\nhello world")
+	if err != nil || r.body != "hello world" {
+		t.Errorf("lenient body parse failed: %+v err=%v", r, err)
+	}
+	// 非法方法
+	if _, err = parseHTTPInput("FETCH https://example.com"); err == nil {
+		t.Error("invalid method should error")
+	}
+	// 缺协议
+	if _, err = parseHTTPInput("GET example.com"); err == nil {
+		t.Error("missing scheme should error")
+	}
+	// 空输入
+	if _, err = parseHTTPInput(""); err == nil {
+		t.Error("empty input should error")
+	}
+}
+
+func TestShellSplit(t *testing.T) {
+	got, err := shellSplit(`curl -X POST "https://a.com/x" 'single word'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"curl", "-X", "POST", "https://a.com/x", "single word"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("arg %d: got %q want %q", i, got[i], want[i])
+		}
+	}
+	// \ 转义空格
+	got, err = shellSplit(`curl a\ b`)
+	if err != nil || len(got) != 2 || got[1] != "a b" {
+		t.Errorf("backslash escape failed: %v err=%v", got, err)
+	}
+	// 未闭合引号
+	if _, err = shellSplit(`curl "abc`); err == nil {
+		t.Error("unclosed quote should error")
+	}
+}
+
+func TestCurlParse(t *testing.T) {
+	// 基本 GET
+	out, err := curlParse(`curl https://example.com`)
+	if err != nil || out != "GET https://example.com" {
+		t.Errorf("basic GET failed: %q err=%v", out, err)
+	}
+	// -X POST + -H + 多个 -d（& 连接）
+	out, err = curlParse(`curl -X POST -H "Content-Type: application/json" -d '{"a":1}' -d 'b=2' https://example.com`)
+	want := "POST https://example.com\nContent-Type: application/json\n\n{\"a\":1}&b=2"
+	if err != nil || out != want {
+		t.Errorf("POST case failed:\ngot  %q\nwant %q err=%v", out, want, err)
+	}
+	// -u → Basic Auth
+	out, err = curlParse(`curl -u user:pass https://example.com`)
+	want = "GET https://example.com\nAuthorization: Basic dXNlcjpwYXNz"
+	if err != nil || out != want {
+		t.Errorf("basic auth failed: got %q want %q err=%v", out, want, err)
+	}
+	// 展示/未知 flag 忽略
+	out, err = curlParse(`curl -sS --compressed -i https://example.com`)
+	if err != nil || out != "GET https://example.com" {
+		t.Errorf("flag ignore failed: got %q err=%v", out, err)
+	}
+	// 非 curl 开头 / 缺 URL
+	if _, err = curlParse(`wget https://example.com`); err == nil {
+		t.Error("non-curl input should error")
+	}
+	if _, err = curlParse(`curl -X GET`); err == nil {
+		t.Error("missing URL should error")
+	}
+}
+
+func TestHTTPStatusLookup(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"200", "200 OK\n2xx 成功"},
+		{"404", "404 Not Found\n4xx 客户端错误"},
+		{"599", "599 Unknown\n5xx 服务器错误"},
+	}
+	for _, c := range cases {
+		out, err := httpStatusLookup(c.in)
+		if err != nil || out != c.want {
+			t.Errorf("%s: got %q want %q err=%v", c.in, out, c.want, err)
+		}
+	}
+	// 非法输入
+	for _, bad := range []string{"", "abc", "99", "700"} {
+		if _, err := httpStatusLookup(bad); err == nil {
+			t.Errorf("%q should error", bad)
+		}
+	}
+}
+
+func TestJWTVerify(t *testing.T) {
+	const secret = "my-secret"
+	tok := makeHS256Token(secret, `{"sub":"1234567890","name":"John Doe"}`)
+	// 正确密钥 → valid
+	out, err := jwtVerify(secret + "\n" + tok)
+	if err != nil || !strings.Contains(out, "[✓] signature valid") {
+		t.Errorf("valid token should pass: err=%v out=%s", err, out)
+	}
+	if !strings.Contains(out, `"sub": "1234567890"`) {
+		t.Errorf("payload should be decoded: %s", out)
+	}
+	// 错误密钥 → invalid
+	out, err = jwtVerify("wrong-secret\n" + tok)
+	if err != nil || !strings.Contains(out, "[✗] signature invalid") {
+		t.Errorf("wrong key should fail: err=%v out=%s", err, out)
+	}
+	// 非 HS256 → 报错
+	h := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	p := base64.RawURLEncoding.EncodeToString([]byte(`{}`))
+	bad := h + "." + p + "." + base64.RawURLEncoding.EncodeToString([]byte("sig"))
+	if _, err = jwtVerify(secret + "\n" + bad); err == nil {
+		t.Error("non-HS256 should error")
+	}
+	// 非三段 token / 缺密钥
+	if _, err = jwtVerify(secret + "\n" + h + "." + p); err == nil {
+		t.Error("2-part token should error")
+	}
+	if _, err = jwtVerify("\n" + tok); err == nil {
+		t.Error("empty key should error")
+	}
+}
+
+func TestHTTPRequestAndAudit(t *testing.T) {
+	// 带安全 Header + CORS 宽松 + 敏感数据的 Server
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=63072000")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		fmt.Fprint(w, `{"password":"secret123"}`)
+	}))
+	defer srv.Close()
+
+	// HTTP Request：状态行 + 响应体
+	out, err := httpRequest("GET " + srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "→ 200 OK") {
+		t.Errorf("missing status line: %s", out)
+	}
+	if !strings.Contains(out, `{"password":"secret123"}`) {
+		t.Errorf("missing body: %s", out)
+	}
+
+	// HTTP Audit：安全 Header ✓ + 缺失 CSP ✗ + CORS 警告 + 敏感数据警告
+	out, err = httpAudit("GET " + srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "[✓] Strict-Transport-Security") {
+		t.Errorf("HSTS should be checked: %s", out)
+	}
+	if !strings.Contains(out, "[✗] 缺失 Content-Security-Policy") {
+		t.Errorf("missing CSP should be reported: %s", out)
+	}
+	if !strings.Contains(out, "[⚠] CORS 允许所有来源") {
+		t.Errorf("CORS warning expected: %s", out)
+	}
+	if !strings.Contains(out, "[⚠] 响应体疑似泄露") {
+		t.Errorf("secret leak warning expected: %s", out)
+	}
+
+	// 无 Header Server → 全部缺失
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "hello")
+	}))
+	defer plain.Close()
+	out, err = httpAudit("GET " + plain.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "[✗] 缺失 Strict-Transport-Security") {
+		t.Errorf("missing HSTS should be reported: %s", out)
+	}
+	if !strings.Contains(out, "[⚠] 非 HTTPS，未检查 TLS 证书") {
+		t.Errorf("non-https TLS note expected: %s", out)
+	}
+}
+
+func TestHTTPAuditTLS(t *testing.T) {
+	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=63072000")
+		fmt.Fprint(w, "hello")
+	}))
+	defer tlsSrv.Close()
+	// 临时替换全局 httpClient 以信任测试证书（仅本测试内生效）
+	old := httpClient
+	httpClient = tlsSrv.Client()
+	defer func() { httpClient = old }()
+	out, err := httpAudit("GET " + tlsSrv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "[✓] TLS 证书有效") {
+		t.Errorf("TLS check should pass: %s", out)
 	}
 }

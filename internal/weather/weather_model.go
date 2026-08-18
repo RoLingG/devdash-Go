@@ -226,7 +226,6 @@ func (m *Model) View() string {
 			return "☀"
 		}
 
-		// 修改: lipgloss v2 中颜色类型改为标准库 image/color.Color
 		getTempColor := func(temp int) color.Color {
 			if temp >= 30 {
 				return ui.ColRed
