@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -234,12 +235,12 @@ var builtinTools = []Tool{
 	// ---- HTTP 接口测试与安全检查（异步执行）----
 	{Section: SectionTools, Group: "HTTP", Name: "HTTP Request", Async: true,
 		Hint: "第一行 METHOD URL，随后 Header 行，空行后 Body", Run: func(s string) (string, error) {
-			return httpRequest(s)
-		}},
+		return httpRequest(s)
+	}},
 	{Section: SectionTools, Group: "HTTP", Name: "HTTP Response Audit", Async: true,
 		Hint: "同 HTTP Request 格式", Run: func(s string) (string, error) {
-			return httpAudit(s)
-		}},
+		return httpAudit(s)
+	}},
 
 	// ---- HTTP 开发辅助（同步）----
 	{Section: SectionTools, Group: "HTTP", Name: "Curl 转请求", Run: func(s string) (string, error) {
@@ -495,7 +496,6 @@ func multiDecode(input string) (steps []string, err error) {
 		if bestName == "" {
 			break
 		}
-		// 转义控制字符，避免污染 TUI 渲染
 		steps = append(steps, fmt.Sprintf("[%d] %s → %s", layer, bestName, truncate(escapeCtl(bestOut))))
 		cur = bestOut
 	}
@@ -505,21 +505,29 @@ func multiDecode(input string) (steps []string, err error) {
 	return steps, nil
 }
 
-// printableRatio 返回字符串中可读字节占比，用于剥层择优
+// printableRatio 返回字符串中可读字符占比，用于剥层择优
+// 分子分母都按 rune 计：改用 len(s) 会变成 rune 数 ÷ 字节数，中文明文只有 0.333，剥层会提前停止
 func printableRatio(s string) float64 {
 	if len(s) == 0 {
 		return 0
 	}
-	good := 0
-	for i := 0; i < len(s); i++ {
-		switch c := s[i]; {
-		case c >= 0x20 && c <= 0x7e: // ASCII 可打印字符
+	good, total := 0, 0
+	for _, r := range s {
+		total++
+		switch {
+		case r == utf8.RuneError: // 非法 UTF-8 字节序列，视为乱码
+		case r == '\n' || r == '\t' || r == '\r': // 文本结构符视为可读
 			good++
-		case c == '\n' || c == '\t' || c == '\r': // 文本结构符视为可读
+		case r >= 0x20 && r <= 0x7e: // ASCII 可打印
+			good++
+		case r > 0x7f && unicode.IsPrint(r): // 非 ASCII 可打印（中日韩、希腊等）
 			good++
 		}
 	}
-	return float64(good) / float64(len(s))
+	if total == 0 {
+		return 0
+	}
+	return float64(good) / float64(total)
 }
 
 // escapeCtl 将控制字符转义为 \xNN，避免其破坏 TUI 渲染
@@ -538,15 +546,17 @@ func escapeCtl(s string) string {
 	return b.String()
 }
 
-// truncate 限制展示长度，避免多层解码中间结果无限膨胀
-func truncate(s string) string {
-	const max = 60
+// truncateN 按 rune 限长并加省略号，供不同展示场景指定各自上限
+func truncateN(s string, max int) string {
 	r := []rune(s)
 	if len(r) <= max {
 		return s
 	}
 	return string(r[:max]) + "…"
 }
+
+// truncate 限制展示长度，避免多层解码中间结果无限膨胀
+func truncate(s string) string { return truncateN(s, 60) }
 
 // wrapLong 按已有换行拆行，仅硬切超过 step 字符的行（幂等：重复调用不二次插换行）
 func wrapLong(s string) string {
@@ -989,7 +999,7 @@ func httpRequest(s string) (string, error) {
 		if len(r) > 4000 {
 			r = r[:4000]
 		}
-		b.WriteString(escapeCtl(wrapLong(string(r)))) // 控制字符转义 + 长内容换行
+		b.WriteString(escapeCtl(wrapLong(string(r))))
 	}
 	return b.String(), nil
 }
@@ -1047,7 +1057,7 @@ func httpAudit(s string) (string, error) {
 	}
 	for _, h := range secHeaders {
 		if v := resp.headerValue(h.name); v != "" {
-			fmt.Fprintf(&b, "[✓] %s: %s\n", h.name, truncate(v))
+			fmt.Fprintf(&b, "[✓] %s: %s\n", h.name, truncateN(v, 96))
 		} else {
 			fmt.Fprintf(&b, "[✗] 缺失 %s（%s）\n", h.name, h.desc)
 		}
@@ -1061,7 +1071,7 @@ func httpAudit(s string) (string, error) {
 	// 响应体敏感数据泄露扫描（仅提示存在性，不打印泄露内容）
 	for _, p := range secretPatterns {
 		if m := p.re.FindString(resp.body); m != "" {
-			fmt.Fprintf(&b, "[⚠] 响应体疑似泄露 %s（命中 %q）\n", p.desc, truncate(m))
+			fmt.Fprintf(&b, "[⚠] 响应体疑似泄露 %s（命中 %q）\n", p.desc, truncateN(m, 24))
 		}
 	}
 	return b.String(), nil
@@ -1234,39 +1244,16 @@ func jwtVerify(s string) (string, error) {
 	return fmt.Sprintf("header:\n%s\n\npayload:\n%s\n\n%s", headerOut, payloadOut, mark), nil
 }
 
-// httpStatusTable 常用状态码描述
-var httpStatusTable = map[int]string{
-	100: "Continue", 101: "Switching Protocols",
-	200: "OK", 201: "Created", 202: "Accepted", 203: "Non-Authoritative Information",
-	204: "No Content", 205: "Reset Content", 206: "Partial Content",
-	300: "Multiple Choices", 301: "Moved Permanently", 302: "Found", 303: "See Other",
-	304: "Not Modified", 307: "Temporary Redirect", 308: "Permanent Redirect",
-	400: "Bad Request", 401: "Unauthorized", 402: "Payment Required", 403: "Forbidden",
-	404: "Not Found", 405: "Method Not Allowed", 406: "Not Acceptable", 407: "Proxy Authentication Required",
-	408: "Request Timeout", 409: "Conflict", 410: "Gone", 411: "Length Required",
-	412: "Precondition Failed", 413: "Payload Too Large", 414: "URI Too Long",
-	415: "Unsupported Media Type", 416: "Range Not Satisfiable", 417: "Expectation Failed",
-	418: "I'm a teapot", 421: "Misdirected Request", 422: "Unprocessable Entity",
-	425: "Too Early", 426: "Upgrade Required", 428: "Precondition Required",
-	429: "Too Many Requests", 431: "Request Header Fields Too Large",
-	451: "Unavailable For Legal Reasons",
-	500: "Internal Server Error", 501: "Not Implemented", 502: "Bad Gateway",
-	503: "Service Unavailable", 504: "Gateway Timeout", 505: "HTTP Version Not Supported",
-}
-
 // httpStatusLookup 状态码 → 描述与分类
 func httpStatusLookup(s string) (string, error) {
 	n, err := strconv.Atoi(strings.TrimSpace(s))
 	if err != nil || n < 100 || n > 599 {
 		return "", fmt.Errorf("无效状态码 %q（需为 100-599 数字）", strings.TrimSpace(s))
 	}
-	desc, ok := httpStatusTable[n]
-	if !ok {
-		if t := http.StatusText(n); t != "" {
-			desc = t
-		} else {
-			desc = "Unknown"
-		}
+	// 描述直接取标准库，随 Go 版本更新；标准库未收录的码标 Unknown
+	desc := http.StatusText(n)
+	if desc == "" {
+		desc = "Unknown"
 	}
 	var category string
 	switch n / 100 {

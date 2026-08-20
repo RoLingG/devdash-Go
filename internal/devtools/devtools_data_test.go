@@ -92,7 +92,7 @@ func TestBase91KnownVector(t *testing.T) {
 // ---- Multi-Decode ----
 
 func TestMultiDecodeLayers(t *testing.T) {
-	// 构造 3 层套娃：hello → base64 → base64 → base64
+	// hello → base64 → base64 → base64
 	// （用同一种编码避免中间层被更靠前的解码器抢先误剥，保证稳定 3 层）
 	plain := "hello devtools"
 	l1 := base64EncodePlain(plain)
@@ -119,14 +119,8 @@ func TestMultiDecodeNotEncoded(t *testing.T) {
 	}
 }
 
-// 测试辅助：直接用标准库编码，避免依赖 builtinTools 里的 Tool.Run 包装
 func base64EncodePlain(s string) string {
 	out, _ := builtinTools[6].Run(s) // Base64 Encode
-	return out
-}
-
-func base32EncodePlain(s string) string {
-	out, _ := builtinTools[2].Run(s) // Base32 Encode
 	return out
 }
 
@@ -171,14 +165,14 @@ func TestNumConvert(t *testing.T) {
 }
 
 func TestUnicodeEscapeUnescape(t *testing.T) {
-	// escape：非 ASCII / 控制字符 → 字面 \uXXXX（6 字符）
+	// escape 非 ASCII / 控制字符 → 字面 \uXXXX（6 字符）
 	if got := unicodeEscape("中"); got != "\\u4E2D" {
 		t.Errorf("unicodeEscape(中) = %q, want %q", got, "\\u4E2D")
 	}
 	if got := unicodeEscape("a\nb"); got != "a\\u000Ab" {
 		t.Errorf("unicodeEscape(a\\nb) = %q, want %q", got, "a\\u000Ab")
 	}
-	// unescape：字面反斜杠序列还原
+	// unescape 字面反斜杠序列还原
 	got, err := unicodeUnescape("\\u4E2D\\x41")
 	if err != nil {
 		t.Fatalf("unicodeUnescape err: %v", err)
