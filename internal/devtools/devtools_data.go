@@ -235,12 +235,12 @@ var builtinTools = []Tool{
 	// ---- HTTP 接口测试与安全检查（异步执行）----
 	{Section: SectionTools, Group: "HTTP", Name: "HTTP Request", Async: true,
 		Hint: "第一行 METHOD URL，随后 Header 行，空行后 Body", Run: func(s string) (string, error) {
-			return httpRequest(s)
-		}},
+		return httpRequest(s)
+	}},
 	{Section: SectionTools, Group: "HTTP", Name: "HTTP Response Audit", Async: true,
 		Hint: "同 HTTP Request 格式", Run: func(s string) (string, error) {
-			return httpAudit(s)
-		}},
+		return httpAudit(s)
+	}},
 
 	// ---- HTTP 开发辅助（同步）----
 	{Section: SectionTools, Group: "HTTP", Name: "Curl 转请求", Run: func(s string) (string, error) {
@@ -1143,7 +1143,8 @@ func curlParse(s string) (string, error) {
 				headers = append(headers, args[i+1])
 				i++
 			}
-		case "-d", "--data", "--data-raw", "--data-ascii", "--data-urlencode":
+		case "-d", "--data", "--data-raw", "--data-ascii", "--data-urlencode",
+			"--data-binary", "--json", "-F", "--form":
 			if i+1 < len(args) {
 				datas = append(datas, args[i+1])
 				i++
@@ -1153,13 +1154,19 @@ func curlParse(s string) (string, error) {
 				user = args[i+1]
 				i++
 			}
-		case "-o", "--output": // 后跟文件名，需跳过
+		case "-o", "--output", "-D", "--dump-header",
+			"-A", "--user-agent", "-e", "--referer", "-b", "--cookie", "-c", "--cookie-jar",
+			"-x", "--proxy", "-m", "--max-time", "--connect-timeout", "-w", "--write-out",
+			"--resolve", "-E", "--cert", "--key", "--interface":
+			// 带参数 flag，跳过参数
 			if i+1 < len(args) {
 				i++
 			}
+		case "-I", "--head":
+			method = "HEAD"
 		case "-O", "--remote-name", "-i", "--include", "-s", "--silent", "-S", "--show-error",
 			"-v", "--verbose", "-L", "--location", "-k", "--insecure", "-g", "--globoff",
-			"--compressed", "-A", "--user-agent", "-e", "--referer", "-b", "--cookie", "-c", "--cookie-jar":
+			"--compressed":
 			// 展示/输出/重定向类 flag，忽略
 		default:
 			if strings.HasPrefix(a, "-") && a != "-" {

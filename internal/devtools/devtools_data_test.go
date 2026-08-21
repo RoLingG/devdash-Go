@@ -451,6 +451,30 @@ func TestCurlParse(t *testing.T) {
 	if err != nil || out != "GET https://example.com" {
 		t.Errorf("flag ignore failed: got %q err=%v", out, err)
 	}
+	// 带参数 flag 跳过其参数，URL 不被吞
+	out, err = curlParse(`curl -A "Mozilla/5.0" https://example.com`)
+	if err != nil || out != "GET https://example.com" {
+		t.Errorf("flag arg skip failed: got %q err=%v", out, err)
+	}
+	// 代理/超时等带参 flag 同样不吞 URL
+	for _, in := range []string{
+		`curl -x http://127.0.0.1:7890 https://example.com`,
+		`curl -m 5 https://example.com`,
+	} {
+		if out, err = curlParse(in); err != nil || out != "GET https://example.com" {
+			t.Errorf("arg flag %q failed: got %q err=%v", in, out, err)
+		}
+	}
+	// --data-binary 收集到 body，method 自动 POST
+	out, err = curlParse(`curl --data-binary '{"a":1}' https://example.com`)
+	if err != nil || out != "POST https://example.com\n\n{\"a\":1}" {
+		t.Errorf("data-binary failed: got %q err=%v", out, err)
+	}
+	// -I 映射为 HEAD
+	out, err = curlParse(`curl -I https://example.com`)
+	if err != nil || out != "HEAD https://example.com" {
+		t.Errorf("-I failed: got %q err=%v", out, err)
+	}
 	// 非 curl 开头 / 缺 URL
 	if _, err = curlParse(`wget https://example.com`); err == nil {
 		t.Error("non-curl input should error")
