@@ -16,7 +16,7 @@
 | `6` | 端口扫描 | 预设开发端口扫描、自定义端口、并发扫描、状态显示 |
 | `7` | LinuxDo 论坛 | 分类浏览、帖子列表、帖子详情、无限滚动、Cookie 认证 |
 | `8` | 路由管理 | 跨平台路由表（Windows/macOS）、添加/删除静态路由、网卡信息、持久化 |
-| `9` | DevTools 工具箱 | Base16/32/64/62/85/91 编码解码、URL 编码、SHA 全系/MD5 哈希、校验和、HMAC、多层解码、JWT 解码、进制转换、Unix 时间戳、Unicode 转义、文本统计、UUID v4、AES-256 加解密（离线纯函数，零依赖） |
+| `9` | DevTools 工具箱 | Base16/32/64/62/85/91 编码解码、URL 编码、SHA 全系/MD5 哈希、校验和、HMAC、多层解码、JWT 解码/验签、进制转换、Unix 时间戳、Unicode 转义、文本统计、UUID v4、AES-256 加解密、HTTP 请求/安全检查/Curl 转请求/状态码（多数离线，HTTP 工具联网） |
 
 ## 安装与运行
 
@@ -204,8 +204,8 @@ cava_go/
 │       ├── route_data_windows.go  # Win32 API 实现（//go:build windows）
 │       └── route_data_darwin.go   # netstat + route 实现（//go:build darwin）
 │   └── devtools/                  # DevTools 工具箱模块
-│       ├── devtools_data.go       # 41 个内置工具（Base/URL/Hash/Checksum/HMAC/Multi/Tools/Encrypt）+ 手写 base62/base91 算法
-│       └── devtools_model.go      # Model + Init/Update/View（纯同步，双列布局）
+│       ├── devtools_data.go       # 46 个内置工具（Codec 19/Hash 13/Tools 14）+ 手写 base62/base91 算法
+│       └── devtools_model.go      # Model + Init/Update/View（双列布局，HTTP 工具异步）
 └──
 ```
 

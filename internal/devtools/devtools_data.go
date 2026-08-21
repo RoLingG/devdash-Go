@@ -235,12 +235,12 @@ var builtinTools = []Tool{
 	// ---- HTTP 接口测试与安全检查（异步执行）----
 	{Section: SectionTools, Group: "HTTP", Name: "HTTP Request", Async: true,
 		Hint: "第一行 METHOD URL，随后 Header 行，空行后 Body", Run: func(s string) (string, error) {
-		return httpRequest(s)
-	}},
+			return httpRequest(s)
+		}},
 	{Section: SectionTools, Group: "HTTP", Name: "HTTP Response Audit", Async: true,
 		Hint: "同 HTTP Request 格式", Run: func(s string) (string, error) {
-		return httpAudit(s)
-	}},
+			return httpAudit(s)
+		}},
 
 	// ---- HTTP 开发辅助（同步）----
 	{Section: SectionTools, Group: "HTTP", Name: "Curl 转请求", Run: func(s string) (string, error) {
