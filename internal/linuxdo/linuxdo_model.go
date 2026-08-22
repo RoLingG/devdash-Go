@@ -61,8 +61,8 @@ type Model struct {
 	// 帖子详情
 	posts             []Post
 	postStream        []int // 剩余未加载的 post ID
-	totalPosts        int   // 帖子总数（API 的 posts_count）
-	postTopicID       int   // 当前话题 ID（用于 /posts.json 请求）
+	totalPosts        int   // 帖子总数
+	postTopicID       int   // 当前话题 ID
 	postStreamLoading bool  // 正在加载更多帖子
 	postTitle         string
 	postScroll        int
@@ -694,9 +694,19 @@ func (m *Model) viewPosts(cardWidth int) string {
 	// 将所有回复拼接成可滚动内容
 	var sb strings.Builder
 	for _, p := range m.posts {
-		// 用户名 + 时间
-		header := lipgloss.NewStyle().Foreground(ui.ColSecondary).Bold(true).Render("@"+p.Username) +
-			lipgloss.NewStyle().Foreground(ui.ColMuted).Render(fmt.Sprintf("  #%d", p.PostNumber))
+		// 帖子头：显示名 + @用户名 + 头衔 + 楼号 + 时间
+		displayName := p.Name
+		if displayName == "" {
+			displayName = p.Username
+		}
+		header := lipgloss.NewStyle().Foreground(ui.ColSecondary).Bold(true).Render(displayName)
+		if p.Name != "" && p.Name != p.Username {
+			header += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  @" + p.Username)
+		}
+		if p.UserTitle != "" {
+			header += lipgloss.NewStyle().Foreground(ui.ColAccent).Render("  [" + p.UserTitle + "]")
+		}
+		header += lipgloss.NewStyle().Foreground(ui.ColMuted).Render(fmt.Sprintf("  #%d", p.PostNumber))
 		if t, err := time.Parse(time.RFC3339, p.CreatedAt); err == nil {
 			header += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  " + t.Format("01-02 15:04"))
 		}
@@ -706,12 +716,42 @@ func (m *Model) viewPosts(cardWidth int) string {
 		text := HTMLToText(p.Cooked)
 		contentLines := strings.Split(text, "\n")
 		for _, line := range contentLines {
-			// 长行截断
-			if ui.RuneLen(line) > cardWidth-6 {
-				line = ui.Truncate(line, cardWidth-9) + "..."
+			// 超长行按显示宽度换行，完整显示不省略
+			for _, wl := range wrapLine(line, cardWidth-6) {
+				sb.WriteString("  " + wl + "\n")
 			}
-			sb.WriteString("  " + line + "\n")
 		}
+
+		// boosts 短快捷回复
+		for _, b := range p.Boosts {
+			name := b.User.Username
+			if name == "" {
+				name = "匿名"
+			}
+			head := "    " + lipgloss.NewStyle().Foreground(ui.ColAccent).Render("⚡ ") +
+				lipgloss.NewStyle().Foreground(ui.ColSecondary).Render("@"+name) + " "
+			headW := lipgloss.Width(head) // head 可见宽度，忽略 ANSI 码
+			boostMaxW := cardWidth - 4 - headW
+			if boostMaxW < 5 {
+				boostMaxW = 5
+			}
+			first := true
+			for _, line := range strings.Split(HTMLToText(b.Cooked), "\n") {
+				for _, wl := range wrapLine(line, boostMaxW) {
+					if first {
+						sb.WriteString(head + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(wl) + "\n")
+						first = false
+					} else {
+						sb.WriteString(strings.Repeat(" ", headW) + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(wl) + "\n")
+					}
+				}
+			}
+		}
+
+		// 互动统计
+		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
+			fmt.Sprintf("  ❤ %d    💬 %d", p.ReactionUsersCount, p.ReplyCount)) + "\n")
+		// 隔断字符行
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(strings.Repeat("─", cardWidth-6)) + "\n\n")
 	}
 
@@ -836,4 +876,27 @@ func (m *Model) viewSearch(cardWidth int) string {
 		content += "\n\n    " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(m.spinner.View()+" Loading more...")
 	}
 	return ui.Card(cardTitle, content, ui.ColAccent, cardWidth)
+}
+
+// wrapLine 按显示宽度将长行切成多行（中文/emoji 计 2 列），用于回复内容完整换行
+func wrapLine(s string, maxW int) []string {
+	if maxW < 1 || lipgloss.Width(s) <= maxW {
+		return []string{s}
+	}
+	var result []string
+	runes := []rune(s)
+	w, start := 0, 0
+	for i, r := range runes {
+		rw := lipgloss.Width(string(r))
+		if w+rw > maxW {
+			result = append(result, string(runes[start:i]))
+			start, w = i, rw
+		} else {
+			w += rw
+		}
+	}
+	if start < len(runes) {
+		result = append(result, string(runes[start:]))
+	}
+	return result
 }

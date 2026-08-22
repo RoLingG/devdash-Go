@@ -40,9 +40,24 @@ type Topic struct {
 type Post struct {
 	ID         int    `json:"id"`
 	Username   string `json:"username"`
-	Cooked     string `json:"cooked"` // HTML 内容
+	Name       string `json:"name"`       // 显示名（空则回退 username）
+	UserTitle  string `json:"user_title"` // 头衔（空/null 不显示）
+	Cooked     string `json:"cooked"`     // HTML 内容
 	PostNumber int    `json:"post_number"`
 	CreatedAt  string `json:"created_at"`
+
+	ReplyCount         int     `json:"reply_count"`          // 被回复次数
+	ReactionUsersCount int     `json:"reaction_users_count"` // 点赞/emoji 互动用户总量
+	Boosts             []Boost `json:"boosts"`               // 短快捷回复
+}
+
+// Boost 帖子的短快捷回复
+type Boost struct {
+	ID     int    `json:"id"`
+	Cooked string `json:"cooked"` // HTML 内容
+	User   struct {
+		Username string `json:"username"`
+	} `json:"user"`
 }
 
 type CategoriesMsg struct {
