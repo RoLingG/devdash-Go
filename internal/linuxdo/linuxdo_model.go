@@ -2,12 +2,14 @@ package linuxdo
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/mattn/go-sixel"
 
 	"cava_go/internal/component"
 	"cava_go/internal/ui"
@@ -21,6 +23,7 @@ const (
 	viewTopics                     // 帖子列表
 	viewPosts                      // 帖子回复
 	viewSearch                     // 搜索结果
+	viewImage                      // 图片预览（Sixel 全屏）
 )
 
 // inputTarget 输入目标
@@ -65,7 +68,9 @@ type Model struct {
 	postTopicID       int   // 当前话题 ID
 	postStreamLoading bool  // 正在加载更多帖子
 	postTitle         string
-	postScroll        int
+	postScroll        int      // 字符行偏移（↑↓ 按 1 行滚，驱动滚动窗口）
+	postCursor        int      // 当前帖子索引（o 预览 + 黄色 ▸ 光标指示基于此）
+	postLineRanges    [][2]int // 每条帖子 [起始行,结束行)，viewPosts 渲染时记录，用于行↔帖子换算
 	postLoading       bool
 	postErr           error
 
@@ -84,7 +89,21 @@ type Model struct {
 	input       component.InputModel
 	inputTarget inputTarget // 当前输入的是哪个字段
 
+	// 图片预览
+	imgURLs      []string // 当前帖子的图片 URL 列表
+	imgIndex     int      // 当前预览的图片索引
+	imgLoading   bool     // 正在加载图片
+	imgErr       error    // 图片加载错误
+	imgSixel     []byte   // 预编码的 Sixel 字节
+	imgHeight    int      // 图片像素高度（用于补换行估算）
+	sixelFlushed bool     // Sixel 已写入 stdout，viewImage 返回静态内容防覆盖
+
 	spinner spinner.Model // bubbles 加载动画
+}
+
+// InImagePreview 当前是否处于图片预览模式（供主程序绕过布局直接全屏输出 Sixel）
+func (m *Model) InImagePreview() bool {
+	return m.mode == viewImage
 }
 
 func (m *Model) Init(cookie, userAgent string) tea.Cmd {
@@ -123,6 +142,18 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case exitImageMsg:
+		// ClearScreen 已置 s.scr.clear 后才切状态，此轮 viewEquals 失效 → flush 全量重绘
+		// 原理见 docs/linuxdo-sixel图片预览与渲染器修复.md §9
+		m.mode = viewPosts
+		m.imgURLs = nil
+		m.imgIndex = 0
+		m.imgSixel = nil
+		m.imgErr = nil
+		m.imgLoading = false
+		m.sixelFlushed = false
+		return m, nil
 
 	case CategoriesMsg:
 		m.catLoading = false
@@ -165,11 +196,18 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.postErr = msg.Err
 		} else {
-			m.posts = msg.Posts
+			// 预提取每篇帖子的图片 URL，供 o 键预览使用
+			m.posts = make([]Post, 0, len(msg.Posts))
+			for _, p := range msg.Posts {
+				_, urls := HTMLToText(p.Cooked)
+				p.ImageURLs = urls
+				m.posts = append(m.posts, p)
+			}
 			m.postStream = msg.Stream
 			m.totalPosts = msg.TotalPosts
 			m.postTitle = msg.Title
 			m.postScroll = 0
+			m.postCursor = 0 // 新帖子详情，光标归位第一条
 			m.postErr = nil
 			// 如果有更多帖子，加载剩余的
 			if len(msg.Stream) > 0 {
@@ -181,7 +219,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 	case PostStreamMsg:
 		if msg.Err == nil {
-			m.posts = append(m.posts, msg.Posts...)
+			// 预提取图片 URL
+			for _, p := range msg.Posts {
+				_, urls := HTMLToText(p.Cooked)
+				p.ImageURLs = urls
+				m.posts = append(m.posts, p)
+			}
 			// 链式加载：还有剩余则继续
 			if len(msg.Remaining) > 0 {
 				m.postStream = msg.Remaining
@@ -220,6 +263,34 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.searchMore = msg.More
 			m.searchErr = nil
 		}
+		return m, nil
+
+	case ImageLoadedMsg:
+		m.imgLoading = false
+		if msg.Err != nil {
+			m.imgErr = msg.Err
+			return m, nil
+		}
+		if msg.Img == nil {
+			m.imgErr = fmt.Errorf("图片解码失败")
+			return m, nil
+		}
+		// Sixel 编码
+		var buf strings.Builder
+		enc := sixel.NewEncoder(&buf)
+		enc.Colors = 256
+		if err := enc.Encode(msg.Img); err != nil {
+			m.imgErr = err
+			return m, nil
+		}
+		m.imgSixel = []byte(buf.String())
+		m.imgHeight = msg.Img.Bounds().Dy()
+		m.imgErr = nil
+		// 直写 stdout：清屏归位 + 写 Sixel 像素。viewImage() 返回固定串使渲染器短路，不覆盖 Sixel。
+		// 入口的光标失步由退出时的全量重绘兜底。原理见 docs/linuxdo-sixel图片预览与渲染器修复.md §3 §9.4
+		os.Stdout.Write([]byte("\x1b[2J\x1b[H")) // 清屏 + 光标归位 (0,0)
+		os.Stdout.Write(m.imgSixel)              // Sixel DCS 像素数据
+		m.sixelFlushed = true
 		return m, nil
 	}
 
@@ -313,6 +384,52 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 		return m.moveCursor(-10)
 	case "ctrl+down":
 		return m.moveCursor(10)
+	case "pgup", "ctrl+p":
+		return m.movePostCursor(-1) // 上一条帖子
+	case "pgdown", "ctrl+n":
+		return m.movePostCursor(1) // 下一条帖子
+	case "o":
+		// 打开当前光标帖(postCursor)的图片预览；postCursor 由 ↑↓/PgUp PgDn 同步维护
+		if m.mode == viewPosts && len(m.posts) > 0 {
+			idx := m.postCursor
+			if idx < 0 {
+				idx = 0
+			}
+			if idx >= len(m.posts) {
+				idx = len(m.posts) - 1
+			}
+			p := m.posts[idx]
+			if len(p.ImageURLs) > 0 {
+				m.imgURLs = p.ImageURLs
+				m.imgIndex = 0
+				m.imgLoading = true
+				m.imgErr = nil
+				m.imgSixel = nil
+				m.sixelFlushed = false
+				m.mode = viewImage
+				return m, tea.Batch(FetchImageCmd(m.imgURLs[0], 0), m.spinner.Tick)
+			}
+		}
+	case "left":
+		// viewImage 中切换上一张
+		if m.mode == viewImage && m.imgIndex > 0 {
+			m.imgIndex--
+			m.imgLoading = true
+			m.imgErr = nil
+			m.imgSixel = nil
+			m.sixelFlushed = false
+			return m, tea.Batch(FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
+		}
+	case "right":
+		// viewImage 中切换下一张
+		if m.mode == viewImage && m.imgIndex < len(m.imgURLs)-1 {
+			m.imgIndex++
+			m.imgLoading = true
+			m.imgErr = nil
+			m.imgSixel = nil
+			m.sixelFlushed = false
+			return m, tea.Batch(FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
+		}
 	}
 	return m, nil
 }
@@ -348,6 +465,7 @@ func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
 		if m.postScroll < 0 {
 			m.postScroll = 0
 		}
+		m.syncPostCursor() // 字符行滚后同步帖子索引
 	case viewSearch:
 		m.searchCursor += delta
 		if m.searchCursor < 0 {
@@ -388,7 +506,8 @@ func (m *Model) setCursor(pos int) {
 		if m.postScroll < 0 {
 			m.postScroll = 0
 		}
-		// 无上限，View 里会 clamp
+		// pos 无上限，实际由 viewPosts 滚动裁剪处 clamp；之后同步 postCursor
+		m.syncPostCursor()
 	case viewSearch:
 		m.searchCursor = pos
 		if m.searchCursor >= len(m.searchResults) {
@@ -398,6 +517,72 @@ func (m *Model) setCursor(pos int) {
 			m.searchCursor = 0
 		}
 	}
+}
+
+// syncPostCursor 按 postScroll（字符行）同步 postCursor（帖子索引）：把顶行映射到所属帖子。
+// postLineRanges 由 viewPosts 渲染时记录，未渲染时跳过仅 clamp。原理见 docs/linuxdo-双维度滚动与图片预览光标.md §4
+func (m *Model) syncPostCursor() {
+	if len(m.posts) == 0 {
+		m.postCursor = 0
+		return
+	}
+	// 钳到帖子总数范围（PgDn 加载更多后帖子变多）
+	if m.postCursor >= len(m.posts) {
+		m.postCursor = len(m.posts) - 1
+	}
+	if m.postCursor < 0 {
+		m.postCursor = 0
+	}
+	if len(m.postLineRanges) == 0 {
+		return
+	}
+	if idx := m.postCursorByLine(m.postScroll); idx >= 0 {
+		m.postCursor = idx
+	}
+}
+
+// postCursorByLine 返回字符行 line 所属的帖子索引（postLineRanges 单调区间，二分），未命中返回 -1。
+func (m *Model) postCursorByLine(line int) int {
+	lo, hi := 0, len(m.postLineRanges)-1
+	for lo <= hi {
+		mid := (lo + hi) / 2
+		r := m.postLineRanges[mid]
+		if line < r[0] {
+			hi = mid - 1
+		} else if line >= r[1] {
+			lo = mid + 1
+		} else {
+			return mid
+		}
+	}
+	return -1
+}
+
+// movePostCursor 按帖子条移动（PgUp/PgDn）：postCursor ± delta 并把 postScroll 跳到目标帖起始行；
+func (m *Model) movePostCursor(delta int) (*Model, tea.Cmd) {
+	if m.mode != viewPosts || len(m.posts) == 0 {
+		return m, nil
+	}
+	m.postCursor += delta
+	if m.postCursor < 0 {
+		m.postCursor = 0
+	}
+	if m.postCursor >= len(m.posts) {
+		m.postCursor = len(m.posts) - 1
+		// 到底且还有未加载帖子 → 触发链式批量加载（下一批由 PostStreamMsg 续接）
+		if !m.postStreamLoading && len(m.postStream) > 0 {
+			m.postStreamLoading = true
+			return m, tea.Batch(FetchPostStreamCmd(m.postTopicID, m.postStream, m.cookie, m.userAgent), m.spinner.Tick)
+		}
+	}
+	// postScroll 跳到目标帖起始行；首屏渲染前 postLineRanges 为空时不跳（clamp 兜底）
+	if m.postCursor < len(m.postLineRanges) {
+		m.postScroll = m.postLineRanges[m.postCursor][0]
+	}
+	if m.postScroll < 0 {
+		m.postScroll = 0
+	}
+	return m, nil
 }
 
 func (m *Model) enterSelected() (*Model, tea.Cmd) {
@@ -466,8 +651,26 @@ func (m *Model) goBack() (*Model, tea.Cmd) {
 		m.searchResults = nil
 		m.searchQuery = ""
 		m.searchErr = nil
+	case viewImage:
+		// 退出预览：先 ClearScreen（置 s.clear 标志，不立即清屏），再 exitImageMsg 切回帖子。
+		// 利用 s.clear 跨 viewEquals 短路保留，切视图时触发全量重绘清掉 Sixel + 重画边框。
+		return m, tea.Sequence(clearScreenCmd(), exitImageCmd())
 	}
 	return m, nil
+}
+
+// exitImageMsg 退出图片预览的自定义消息
+// 单独成一条消息，让 ClearScreen 先于状态切换被处理，利用 s.clear 跨轮保留
+type exitImageMsg struct{}
+
+// exitImageCmd 产生 exitImageMsg 的命令
+func exitImageCmd() tea.Cmd {
+	return func() tea.Msg { return exitImageMsg{} }
+}
+
+// clearScreenCmd 包装 tea.ClearScreen() 为 Cmd
+func clearScreenCmd() tea.Cmd {
+	return func() tea.Msg { return tea.ClearScreen() }
 }
 
 func (m *Model) fetchCurrentTopics() tea.Cmd {
@@ -551,6 +754,8 @@ func (m *Model) View() string {
 		return m.viewPosts(cardWidth)
 	case viewSearch:
 		return m.viewSearch(cardWidth)
+	case viewImage:
+		return m.viewImage()
 	}
 	return ""
 }
@@ -691,9 +896,18 @@ func (m *Model) viewPosts(cardWidth int) string {
 		return ui.Card(m.postTitle, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  No posts"), ui.ColMuted, cardWidth)
 	}
 
-	// 将所有回复拼接成可滚动内容
-	var sb strings.Builder
-	for _, p := range m.posts {
+	// 将所有回复拼接成可滚动内容；边构建边记每帖字符行范围 postLineRanges，供 ↑↓ 行 ↔ o 帖子预览换算
+	lines := make([]string, 0, 64)
+	m.postLineRanges = m.postLineRanges[:0] // 每帧重建：换行随宽度变化，旧范围不可复用
+	for i, p := range m.posts {
+		startLen := len(lines) // 该帖起始行号
+
+		// 当前 postCursor 帖行首画黄色 ▸（ColAccent=ANSI226，复用 box.go 选中范式），其余帖 2 空格对齐
+		cursorMark := "  "
+		if i == m.postCursor {
+			cursorMark = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸ ")
+		}
+
 		// 帖子头：显示名 + @用户名 + 头衔 + 楼号 + 时间
 		displayName := p.Name
 		if displayName == "" {
@@ -710,16 +924,22 @@ func (m *Model) viewPosts(cardWidth int) string {
 		if t, err := time.Parse(time.RFC3339, p.CreatedAt); err == nil {
 			header += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  " + t.Format("01-02 15:04"))
 		}
-		sb.WriteString(header + "\n")
+		lines = append(lines, cursorMark+header)
 
 		// 内容（HTML → 纯文本）
-		text := HTMLToText(p.Cooked)
-		contentLines := strings.Split(text, "\n")
-		for _, line := range contentLines {
-			// 超长行按显示宽度换行，完整显示不省略
+		text, _ := HTMLToText(p.Cooked)
+		for _, line := range strings.Split(text, "\n") {
+			// 超长行按显示宽度换行
 			for _, wl := range wrapLine(line, cardWidth-6) {
-				sb.WriteString("  " + wl + "\n")
+				lines = append(lines, "  "+wl)
 			}
+		}
+
+		if len(p.ImageURLs) > 0 {
+			lines = append(lines, "") // 图片提示前空行，与上文隔开
+			lines = append(lines, lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
+				fmt.Sprintf("  📷 %d张图片，按 o 预览", len(p.ImageURLs))))
+			lines = append(lines, "") // 图片提示后空行，与 boosts 隔开
 		}
 
 		// boosts 短快捷回复
@@ -736,32 +956,33 @@ func (m *Model) viewPosts(cardWidth int) string {
 				boostMaxW = 5
 			}
 			first := true
-			for _, line := range strings.Split(HTMLToText(b.Cooked), "\n") {
+			boostText, _ := HTMLToText(b.Cooked)
+			for _, line := range strings.Split(boostText, "\n") {
 				for _, wl := range wrapLine(line, boostMaxW) {
 					if first {
-						sb.WriteString(head + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(wl) + "\n")
+						lines = append(lines, head+lipgloss.NewStyle().Foreground(ui.ColMuted).Render(wl))
 						first = false
 					} else {
-						sb.WriteString(strings.Repeat(" ", headW) + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(wl) + "\n")
+						lines = append(lines, strings.Repeat(" ", headW)+lipgloss.NewStyle().Foreground(ui.ColMuted).Render(wl))
 					}
 				}
 			}
 		}
 
-		// 互动统计
-		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
-			fmt.Sprintf("  ❤ %d    💬 %d", p.ReactionUsersCount, p.ReplyCount)) + "\n")
-		// 隔断字符行
-		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(strings.Repeat("─", cardWidth-6)) + "\n\n")
+		// 互动统计 + 隔断
+		lines = append(lines, "\n"+lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
+			fmt.Sprintf("  ❤ %d    💬 %d", p.ReactionUsersCount, p.ReplyCount)))
+		lines = append(lines, "\n"+lipgloss.NewStyle().Foreground(ui.ColMuted).Render(strings.Repeat("─", cardWidth-6))+"\n")
+
+		m.postLineRanges = append(m.postLineRanges, [2]int{startLen, len(lines)})
 	}
 
 	// 滚动裁剪
-	contentLines := strings.Split(strings.TrimRight(sb.String(), "\n"), "\n")
 	viewH := m.height - 7
 	if viewH < 3 {
 		viewH = 3
 	}
-	total := len(contentLines)
+	total := len(lines)
 	if m.postScroll > total-viewH {
 		m.postScroll = total - viewH
 	}
@@ -772,11 +993,11 @@ func (m *Model) viewPosts(cardWidth int) string {
 	if end > total {
 		end = total
 	}
-	visible := strings.Join(contentLines[m.postScroll:end], "\n")
+	visible := strings.Join(lines[m.postScroll:end], "\n")
 
 	title := fmt.Sprintf("%s (%d posts)", m.postTitle, m.totalPosts)
 	if m.postStreamLoading {
-		// 流式加载更多帖子时，标题显示加载动画 + 已加载数/总数
+		// 链式批量加载更多帖子时，标题显示加载动画 + 已加载数/总数
 		title = fmt.Sprintf("%s %s (%d/%d posts)", m.postTitle, m.spinner.View(), len(m.posts), m.totalPosts)
 	}
 	return ui.Card(title, visible, ui.ColAccent, cardWidth)
@@ -876,6 +1097,22 @@ func (m *Model) viewSearch(cardWidth int) string {
 		content += "\n\n    " + lipgloss.NewStyle().Foreground(ui.ColMuted).Render(m.spinner.View()+" Loading more...")
 	}
 	return ui.Card(cardTitle, content, ui.ColAccent, cardWidth)
+}
+
+// viewImage Sixel 全屏图片预览（主程序会绕过 tab/status 布局直接全屏输出）
+func (m *Model) viewImage() string {
+	// 加载失败：返回固定错误卡片
+	if m.imgErr != nil {
+		errContent := lipgloss.NewStyle().Foreground(ui.ColRed).Render("✗ "+m.imgErr.Error()) + "\n"
+		errContent += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("Esc back, ← → navigate")
+		return ui.Card("Image Preview", errContent, ui.ColRed, m.width)
+	}
+	// 关键：加载中和已加载都返回同一个完全固定的静态字符串（不含 spinner、不含 imgIndex 等会变的字段）
+	// 这样渲染器第一帧后触发 viewEquals 跳过 → 不清屏 → ImageLoadedMsg 直写的 Sixel 得以保留
+	// 切换图片时 view 也不变，跳过不被打破；图片序号信息被 Sixel 覆盖，用户看不到，故省略
+	return ui.Card("Image Preview",
+		lipgloss.NewStyle().Foreground(ui.ColAccent).Render("📷 Loading...  Esc back, ← → navigate"),
+		ui.ColAccent, m.width)
 }
 
 // wrapLine 按显示宽度将长行切成多行（中文/emoji 计 2 列），用于回复内容完整换行

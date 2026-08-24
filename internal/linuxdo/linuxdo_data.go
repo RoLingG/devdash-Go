@@ -5,6 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"net/url"
@@ -40,8 +44,8 @@ type Topic struct {
 type Post struct {
 	ID         int    `json:"id"`
 	Username   string `json:"username"`
-	Name       string `json:"name"`       // 显示名（空则回退 username）
-	UserTitle  string `json:"user_title"` // 头衔（空/null 不显示）
+	Name       string `json:"name"`       // 显示名
+	UserTitle  string `json:"user_title"` // 头衔
 	Cooked     string `json:"cooked"`     // HTML 内容
 	PostNumber int    `json:"post_number"`
 	CreatedAt  string `json:"created_at"`
@@ -49,6 +53,8 @@ type Post struct {
 	ReplyCount         int     `json:"reply_count"`          // 被回复次数
 	ReactionUsersCount int     `json:"reaction_users_count"` // 点赞/emoji 互动用户总量
 	Boosts             []Boost `json:"boosts"`               // 短快捷回复
+
+	ImageURLs []string `json:"-"` // 图片链接列表
 }
 
 // Boost 帖子的短快捷回复
@@ -413,7 +419,7 @@ var (
 )
 
 // HTMLToText 将 Discourse cooked HTML 转换为终端可读纯文本
-func HTMLToText(html string) string {
+func HTMLToText(html string) (string, []string) {
 	s := html
 
 	// 块级元素换行
@@ -430,7 +436,21 @@ func HTMLToText(html string) string {
 	s = strings.ReplaceAll(s, "<blockquote>", "> ")
 
 	// 图片 → [image]
-	s = regexp.MustCompile(`<img[^>]*>`).ReplaceAllString(s, "[image]")
+	imgRe := regexp.MustCompile(`<img[^>]*src="([^"]*)"[^>]*>`)
+	var imageURLs []string
+	s = imgRe.ReplaceAllStringFunc(s, func(match string) string {
+		sub := imgRe.FindStringSubmatch(match)
+		if len(sub) < 2 || sub[1] == "" {
+			return "[img]"
+		}
+		// 过滤 Discourse 内置 emoji 图片（如 cdn.ldstatic.com/images/emoji/twemoji/xxx.png）
+		// 这类是表情符号，不是内容图片，不纳入预览
+		if strings.Contains(sub[1], "/images/emoji/") {
+			return ""
+		}
+		imageURLs = append(imageURLs, sub[1])
+		return fmt.Sprintf("[img:%d]", len(imageURLs))
+	})
 
 	// 链接 → 提取文本
 	linkRe := regexp.MustCompile(`<a[^>]*>(.*?)</a>`)
@@ -451,9 +471,46 @@ func HTMLToText(html string) string {
 
 	// 清理多余空白
 	s = spaceRe.ReplaceAllString(s, " ")
-	// 清理多余空行
 	s = regexp.MustCompile(`\n{3,}`).ReplaceAllString(s, "\n\n")
 	s = strings.TrimSpace(s)
 
-	return s
+	return s, imageURLs
+}
+
+// ImageLoadedMsg 图片下载+解码完成消息
+type ImageLoadedMsg struct {
+	Index int
+	Img   image.Image
+	Err   error
+}
+
+// FetchImageCmd 下载并解码图片（走代理）
+func FetchImageCmd(imgURL string, index int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "GET", imgURL, nil)
+		if err != nil {
+			return ImageLoadedMsg{Index: index, Err: err}
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("Referer", "https://linux.do/")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return ImageLoadedMsg{Index: index, Err: err}
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return ImageLoadedMsg{Index: index, Err: fmt.Errorf("HTTP %d", resp.StatusCode)}
+		}
+
+		img, _, err := image.Decode(resp.Body)
+		if err != nil {
+			return ImageLoadedMsg{Index: index, Err: err}
+		}
+		return ImageLoadedMsg{Index: index, Img: img}
+	}
 }

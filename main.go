@@ -330,6 +330,14 @@ func (m model) View() tea.View {
 		return v
 	}
 
+	// 图片预览模式 Sixel 是像素级协议，必须绕过 tab/status 布局直接全屏输出
+	// 否则会被布局管线当普通文本处理导致像素数据被冲垮
+	if m.state == ui.TabLinuxDo && m.linuxdo.InImagePreview() {
+		v := tea.NewView(m.linuxdo.View())
+		v.AltScreen = true
+		return v
+	}
+
 	tabBar := ui.RenderTabBar(m.state, m.width)
 
 	// 根据当前 Tab 渲染对应模块

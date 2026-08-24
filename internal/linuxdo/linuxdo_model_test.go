@@ -899,7 +899,8 @@ func TestLinuxDoViewPosts(t *testing.T) {
 	m.postTitle = "Topic Title"
 	m.totalPosts = 3
 	m.posts = []Post{
-		{ID: 1, Username: "alice", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>Hello there</p>"},
+		// 设 Name(与 Username 不同)以触发 @username 渲染分支，测试断言 @alice 才成立
+		{ID: 1, Name: "Alice", Username: "alice", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>Hello there</p>"},
 	}
 	v := m.View()
 	for _, want := range []string{"Topic Title", "(3 posts)", "@alice", "#1", "Hello there"} {
@@ -964,5 +965,137 @@ func TestLinuxDoViewSearch(t *testing.T) {
 	m3.searchResults = []SearchResult{{TopicID: 1}}
 	if v := m3.View(); !strings.Contains(v, "(no title)") {
 		t.Errorf("空标题 fallback 缺失: %q", v)
+	}
+}
+
+// TestLinuxDoPostLineRanges 验证 viewPosts 渲染后 postLineRanges 被正确填充，
+// 且 postCursorByLine 能把字符行号映射回帖子索引（含隔断行归属上帖）。
+func TestLinuxDoPostLineRanges(t *testing.T) {
+	m := newLinuxdoModel()
+	m.cookie = "c"
+	m.mode = viewPosts
+	m.postTitle = "T"
+	m.posts = []Post{
+		{ID: 1, Name: "A", Username: "a", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>line1</p>"},
+		{ID: 2, Name: "B", Username: "b", PostNumber: 2, CreatedAt: "2026-08-01T12:01:00+08:00", Cooked: "<p>line2</p>"},
+	}
+	_ = m.View() // 触发 viewPosts 渲染，填充 postLineRanges
+
+	if len(m.postLineRanges) != len(m.posts) {
+		t.Fatalf("postLineRanges 长度 = %d, want %d", len(m.postLineRanges), len(m.posts))
+	}
+	// 首帖必须从第 0 行开始
+	if m.postLineRanges[0][0] != 0 {
+		t.Errorf("首帖起始行 = %d, want 0", m.postLineRanges[0][0])
+	}
+	// 区间单调递增且首尾相接
+	for i := 1; i < len(m.postLineRanges); i++ {
+		if m.postLineRanges[i][0] != m.postLineRanges[i-1][1] {
+			t.Errorf("帖子 %d 起始行 %d 与上帖结束行 %d 不衔接", i, m.postLineRanges[i][0], m.postLineRanges[i-1][1])
+		}
+		if m.postLineRanges[i][1] <= m.postLineRanges[i][0] {
+			t.Errorf("帖子 %d 区间非正长度: %v", i, m.postLineRanges[i])
+		}
+	}
+
+	// postCursorByLine: 每帖内部任意行 → 该帖索引
+	for i, r := range m.postLineRanges {
+		for line := r[0]; line < r[1]; line++ {
+			if got := m.postCursorByLine(line); got != i {
+				t.Errorf("postCursorByLine(%d) = %d, want %d", line, got, i)
+			}
+		}
+	}
+	// 越界行（总行数）返回 -1
+	if m.postCursorByLine(m.postLineRanges[len(m.postLineRanges)-1][1]) != -1 {
+		t.Error("超出最后一帖的行号应返回 -1")
+	}
+}
+
+// TestLinuxDoSyncPostCursor 验证 ↑↓ 字符行滚动后，postCursor 跟着行号所属帖子走。
+func TestLinuxDoSyncPostCursor(t *testing.T) {
+	m := newLinuxdoModel()
+	m.cookie = "c"
+	m.mode = viewPosts
+	m.postTitle = "T"
+	m.posts = []Post{
+		{ID: 1, Name: "A", Username: "a", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>first</p>"},
+		{ID: 2, Name: "B", Username: "b", PostNumber: 2, CreatedAt: "2026-08-01T12:01:00+08:00", Cooked: "<p>second</p>"},
+	}
+	_ = m.View()
+	if len(m.postLineRanges) < 2 {
+		t.Fatal("需至少 2 帖以测同步")
+	}
+	// 把光标滚到第二帖起始行，syncPostCursor 应把 postCursor 指向 1
+	m.postScroll = m.postLineRanges[1][0]
+	m.syncPostCursor()
+	if m.postCursor != 1 {
+		t.Errorf("滚到第二帖起始行后 postCursor = %d, want 1", m.postCursor)
+	}
+	// 滚回第一帖内部某行
+	m.postScroll = m.postLineRanges[0][0]
+	m.syncPostCursor()
+	if m.postCursor != 0 {
+		t.Errorf("滚回第一帖后 postCursor = %d, want 0", m.postCursor)
+	}
+}
+
+// TestLinuxDoMovePostCursorLoadMore 验证 PgDn 到底且还有未加载帖子时触发链式批量加载。
+func TestLinuxDoMovePostCursorLoadMore(t *testing.T) {
+	m := newLinuxdoModel()
+	m.cookie = "c"
+	m.userAgent = "u"
+	m.mode = viewPosts
+	m.postTitle = "T"
+	m.postTopicID = 5
+	m.posts = []Post{{ID: 1, Name: "A", Username: "a", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>x</p>"}}
+	m.postStream = []int{2, 3} // 还有 2 条未加载
+	m.postStreamLoading = false
+	_ = m.View() // 填充 postLineRanges
+
+	// PgDn：postCursor 0→1，超界钳到最后一条(idx0)，且检测到有剩余 stream → 触发加载
+	nm, cmd := m.movePostCursor(1)
+	if cmd == nil {
+		t.Error("到底且有剩余 stream 时 movePostCursor 应返回加载 Cmd")
+	}
+	if !nm.postStreamLoading {
+		t.Error("触发加载后 postStreamLoading 应为 true")
+	}
+	if m.postCursor != 0 {
+		t.Errorf("单帖时 PgDn 后 postCursor 应钳到 0, got %d", m.postCursor)
+	}
+
+	// 无剩余 stream 时 PgDn 不应触发加载
+	m2 := newLinuxdoModel()
+	m2.cookie = "c"
+	m2.mode = viewPosts
+	m2.posts = []Post{{ID: 1, Name: "A", Username: "a", PostNumber: 1, Cooked: "<p>x</p>"}}
+	m2.postStream = nil
+	_ = m2.View()
+	_, cmd2 := m2.movePostCursor(1)
+	if cmd2 != nil {
+		t.Error("无剩余 stream 时 movePostCursor 不应返回 Cmd")
+	}
+}
+
+// TestLinuxDoViewPostsCursorMark 验证当前 postCursor 帖子行首有黄色 ▸ 光标标记。
+func TestLinuxDoViewPostsCursorMark(t *testing.T) {
+	m := newLinuxdoModel()
+	m.cookie = "c"
+	m.mode = viewPosts
+	m.postTitle = "T"
+	m.posts = []Post{
+		{ID: 1, Name: "A", Username: "a", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>p1</p>"},
+		{ID: 2, Name: "B", Username: "b", PostNumber: 2, CreatedAt: "2026-08-01T12:01:00+08:00", Cooked: "<p>p2</p>"},
+	}
+	m.postCursor = 1 // 光标停在第二帖
+	v := m.View()
+	// ▸ 光标标记应在视图中出现（ColAccent=黄色，ANSI 226）
+	if !strings.Contains(v, "▸") {
+		t.Errorf("当前帖子应显示 ▸ 光标标记: %q", v)
+	}
+	// 光标 ▸ 应只出现一次（仅当前帖）
+	if strings.Count(v, "▸") != 1 {
+		t.Errorf("▸ 应只出现 1 次(仅当前帖), got %d", strings.Count(v, "▸"))
 	}
 }

@@ -14,9 +14,9 @@
 | `4` | 設定瀏覽 | JSON/YAML/TOML 樹狀顯示、折疊/展開、搜尋醒目提示篩選、節點路徑顯示、語法醒目提示、最近記錄、**資料快取** |
 | `5` | 系統監控 | CPU 整體/每核心使用率、記憶體/磁碟進度列、行程清單、閾值顏色預警、Tab 切換子檢視、**自動重新整理** |
 | `6` | 埠號掃描 | 預設開發埠號掃描、自訂埠號、並行掃描、狀態顯示 |
-| `7` | LinuxDo 論壇 | 分類瀏覽、主題清單、主題詳情、無限捲動、Cookie 驗證 |
+| `7` | LinuxDo 論壇 | 分類瀏覽、主題清單、主題詳情、Sixel 圖片預覽、雙維度捲動（↑↓ 字元行 / PgUp PgDn 帖子條）、鏈式批次載入、Cookie 驗證 |
 | `8` | 路由管理 | 跨平台路由表（Windows/macOS）、新增/刪除靜態路由、網路介面資訊、持久化 |
-| `9` | DevTools 工具箱 | Base16/32/64/62/85/91 編碼解碼、URL 編碼、MD5/SHA 雜湊、多層解碼（離線純函式，零依賴） |
+| `9` | DevTools 工具箱 | Base16/32/64/62/85/91 編碼解碼、URL 編碼、SHA 全系/MD5 雜湊、校驗和、HMAC、多層解碼、JWT 解碼/驗簽、進制轉換、Unix 時間戳、Unicode 轉義、文字統計、UUID v4、AES-256 加解密、HTTP 請求/安全檢查/Curl 轉請求/狀態碼（多數離線，HTTP 工具連網） |
 
 ## 安裝與執行
 
@@ -129,11 +129,13 @@ cat app.log | ./devdash.exe
 - `Esc` - 關閉輸入框
 
 ### LinuxDo 論壇模組 (`7`)
-- `↑` `↓` / `k` `j` - 捲動/移動選取
+- `↑` `↓` / `k` `j` - 按字元行捲動
+- `PgUp` / `PgDn`（或 `Ctrl+P` `Ctrl+N`） - 按帖子條移動
 - `Home` / `End` - 跳轉首/末
 - `Enter` - 進入下級（分類→主題清單→主題詳情）
 - `Esc` - 返回上級
-- `Ctrl+↑` `Ctrl+↓` - 快速捲動 ±10 條
+- `Ctrl+↑` `Ctrl+↓` - 快速捲動 ±10 行
+- `o` - 預覽目前游標帖的圖片（Sixel 像素圖，← → 切換圖片）
 - `/` - 設定 Cookie / User-Agent
 - `Ctrl+R` - 重新整理目前檢視
 - `Ctrl+U` - 清空 Cookie
@@ -203,8 +205,8 @@ cava_go/
 │       ├── route_data_windows.go  # Win32 API 實作（//go:build windows）
 │       └── route_data_darwin.go   # netstat + route 實作（//go:build darwin）
 │   └── devtools/                  # DevTools 工具箱模組
-│       ├── devtools_data.go       # 23 個內建工具（Base/URL/Hash/Multi）+ 手寫 base62/base91 演算法
-│       └── devtools_model.go      # Model + Init/Update/View（純同步，雙欄版面配置）
+│       ├── devtools_data.go       # 46 個內建工具（Codec 19/Hash 13/Tools 14）+ 手寫 base62/base91 演算法
+│       └── devtools_model.go      # Model + Init/Update/View（雙欄版面配置，HTTP 工具非同步）
 └──
 ```
 

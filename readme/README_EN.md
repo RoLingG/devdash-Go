@@ -14,9 +14,9 @@ A terminal dashboard based on [Bubble Tea v2](https://github.com/charmbracelet/b
 | `4` | Config Browser | JSON/YAML/TOML tree view, collapse/expand, search highlighting filter, node path display, syntax highlighting, recent records, **data caching** |
 | `5` | System Monitor | CPU overall/per-core usage, memory/disk progress bars, process list, threshold color warnings, Tab to switch sub-views, **auto-refresh** |
 | `6` | Port Scanner | Preset development ports scanning, custom ports, concurrent scanning, status display |
-| `7` | LinuxDo Forum | Category browsing, topic list, topic details, infinite scrolling, Cookie authentication |
+| `7` | LinuxDo Forum | Category browsing, topic list, topic details, Sixel image preview, dual-axis scrolling (↑↓ char lines / PgUp PgDn post entries), chained batch loading, Cookie authentication |
 | `8` | Route Manager | Cross-platform routing table (Windows/macOS), add/delete static routes, network interface info, persistence |
-| `9` | DevTools Toolbox | Base16/32/64/62/85/91 encode/decode, URL encoding, MD5/SHA hashing, multi-layer decode (offline pure functions, zero dependencies) |
+| `9` | DevTools Toolbox | Base16/32/64/62/85/91 encode/decode, URL encoding, SHA family/MD5 hashing, checksums, HMAC, multi-layer decode, JWT decode/verify, number conversion, Unix timestamp, Unicode escape, text stats, UUID v4, AES-256 encrypt/decrypt, HTTP request/security audit/curl-to-request/status lookup (mostly offline, HTTP tools online) |
 
 ## Installation & Running
 
@@ -129,11 +129,13 @@ After selecting configuration, a splash screen (ASCII Logo + version info) is di
 - `Esc` - Close input box
 
 ### LinuxDo Forum Module (`7`)
-- `↑` `↓` / `k` `j` - Scroll/move selection
+- `↑` `↓` / `k` `j` - Scroll by character line
+- `PgUp` / `PgDn` (or `Ctrl+P` `Ctrl+N`) - Move by post entry
 - `Home` / `End` - Jump to first/last
 - `Enter` - Enter next level (category → topic list → topic details)
 - `Esc` - Return to previous level
-- `Ctrl+↑` `Ctrl+↓` - Quick scroll ±10 entries
+- `Ctrl+↑` `Ctrl+↓` - Quick scroll ±10 lines
+- `o` - Preview images of the current cursor post (Sixel pixel graphics, ← → to switch images)
 - `/` - Set Cookie / User-Agent
 - `Ctrl+R` - Refresh current view
 - `Ctrl+U` - Clear Cookie
@@ -203,8 +205,8 @@ cava_go/
 │       ├── route_data_windows.go  # Win32 API implementation (//go:build windows)
 │       └── route_data_darwin.go   # netstat + route implementation (//go:build darwin)
 │   └── devtools/                  # DevTools Toolbox
-│       ├── devtools_data.go       # 23 built-in tools (Base/URL/Hash/Multi) + hand-written base62/base91
-│       └── devtools_model.go      # Model + Init/Update/View (pure sync, two-column layout)
+│       ├── devtools_data.go       # 46 built-in tools (Codec 19/Hash 13/Tools 14) + hand-written base62/base91
+│       └── devtools_model.go      # Model + Init/Update/View (two-column layout, HTTP tools async)
 └──
 ```
 
