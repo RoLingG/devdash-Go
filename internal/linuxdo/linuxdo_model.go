@@ -23,7 +23,7 @@ const (
 	viewTopics                     // 帖子列表
 	viewPosts                      // 帖子回复
 	viewSearch                     // 搜索结果
-	viewImage                      // 图片预览（Sixel 全屏）
+	viewImage                      // 图片预览
 )
 
 // inputTarget 输入目标
@@ -145,7 +145,6 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 
 	case exitImageMsg:
 		// ClearScreen 已置 s.scr.clear 后才切状态，此轮 viewEquals 失效 → flush 全量重绘
-		// 原理见 docs/linuxdo-sixel图片预览与渲染器修复.md §9
 		m.mode = viewPosts
 		m.imgURLs = nil
 		m.imgIndex = 0
@@ -286,8 +285,8 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.imgSixel = []byte(buf.String())
 		m.imgHeight = msg.Img.Bounds().Dy()
 		m.imgErr = nil
-		// 直写 stdout：清屏归位 + 写 Sixel 像素。viewImage() 返回固定串使渲染器短路，不覆盖 Sixel。
-		// 入口的光标失步由退出时的全量重绘兜底。原理见 docs/linuxdo-sixel图片预览与渲染器修复.md §3 §9.4
+		// 直写 stdout：清屏归位 + 写 Sixel 像素
+		// viewImage() 返回固定串使渲染器短路，不覆盖 Sixel 入口的光标失步由退出时的全量重绘兜底
 		os.Stdout.Write([]byte("\x1b[2J\x1b[H")) // 清屏 + 光标归位 (0,0)
 		os.Stdout.Write(m.imgSixel)              // Sixel DCS 像素数据
 		m.sixelFlushed = true
@@ -389,7 +388,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	case "pgdown", "ctrl+n":
 		return m.movePostCursor(1) // 下一条帖子
 	case "o":
-		// 打开当前光标帖(postCursor)的图片预览；postCursor 由 ↑↓/PgUp PgDn 同步维护
+		// 打开当前光标帖(postCursor)的图片预览
+		// postCursor 由 ↑↓/PgUp PgDn 同步维护
 		if m.mode == viewPosts && len(m.posts) > 0 {
 			idx := m.postCursor
 			if idx < 0 {
@@ -506,7 +506,7 @@ func (m *Model) setCursor(pos int) {
 		if m.postScroll < 0 {
 			m.postScroll = 0
 		}
-		// pos 无上限，实际由 viewPosts 滚动裁剪处 clamp；之后同步 postCursor
+		// pos 无上限，实际由 viewPosts 滚动裁剪处 clamp，之后同步 postCursor
 		m.syncPostCursor()
 	case viewSearch:
 		m.searchCursor = pos
@@ -519,8 +519,8 @@ func (m *Model) setCursor(pos int) {
 	}
 }
 
-// syncPostCursor 按 postScroll（字符行）同步 postCursor（帖子索引）：把顶行映射到所属帖子。
-// postLineRanges 由 viewPosts 渲染时记录，未渲染时跳过仅 clamp。原理见 docs/linuxdo-双维度滚动与图片预览光标.md §4
+// syncPostCursor 按 postScroll（字符行）同步 postCursor（帖子索引）：把顶行映射到所属帖子
+// postLineRanges 由 viewPosts 渲染时记录，未渲染时跳过仅 clamp
 func (m *Model) syncPostCursor() {
 	if len(m.posts) == 0 {
 		m.postCursor = 0
@@ -541,7 +541,7 @@ func (m *Model) syncPostCursor() {
 	}
 }
 
-// postCursorByLine 返回字符行 line 所属的帖子索引（postLineRanges 单调区间，二分），未命中返回 -1。
+// postCursorByLine 返回字符行 line 所属的帖子索引（postLineRanges 单调区间，二分快速匹配）
 func (m *Model) postCursorByLine(line int) int {
 	lo, hi := 0, len(m.postLineRanges)-1
 	for lo <= hi {
@@ -558,7 +558,7 @@ func (m *Model) postCursorByLine(line int) int {
 	return -1
 }
 
-// movePostCursor 按帖子条移动（PgUp/PgDn）：postCursor ± delta 并把 postScroll 跳到目标帖起始行；
+// movePostCursor 按帖子条移动（PgUp/PgDn），postCursor ± delta 并把 postScroll 跳到目标帖起始行
 func (m *Model) movePostCursor(delta int) (*Model, tea.Cmd) {
 	if m.mode != viewPosts || len(m.posts) == 0 {
 		return m, nil
@@ -575,7 +575,7 @@ func (m *Model) movePostCursor(delta int) (*Model, tea.Cmd) {
 			return m, tea.Batch(FetchPostStreamCmd(m.postTopicID, m.postStream, m.cookie, m.userAgent), m.spinner.Tick)
 		}
 	}
-	// postScroll 跳到目标帖起始行；首屏渲染前 postLineRanges 为空时不跳（clamp 兜底）
+	// postScroll 跳到目标帖起始行，首屏渲染前 postLineRanges 为空时不跳（clamp 兜底）
 	if m.postCursor < len(m.postLineRanges) {
 		m.postScroll = m.postLineRanges[m.postCursor][0]
 	}
@@ -652,8 +652,8 @@ func (m *Model) goBack() (*Model, tea.Cmd) {
 		m.searchQuery = ""
 		m.searchErr = nil
 	case viewImage:
-		// 退出预览：先 ClearScreen（置 s.clear 标志，不立即清屏），再 exitImageMsg 切回帖子。
-		// 利用 s.clear 跨 viewEquals 短路保留，切视图时触发全量重绘清掉 Sixel + 重画边框。
+		// 退出预览：先 ClearScreen（置 s.clear 标志，不立即清屏），再 exitImageMsg 切回帖子
+		// 利用 s.clear 跨 viewEquals 短路保留，切视图时触发全量重绘清掉 Sixel + 重画边框
 		return m, tea.Sequence(clearScreenCmd(), exitImageCmd())
 	}
 	return m, nil
@@ -896,13 +896,13 @@ func (m *Model) viewPosts(cardWidth int) string {
 		return ui.Card(m.postTitle, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  No posts"), ui.ColMuted, cardWidth)
 	}
 
-	// 将所有回复拼接成可滚动内容；边构建边记每帖字符行范围 postLineRanges，供 ↑↓ 行 ↔ o 帖子预览换算
+	// 将所有回复拼接成可滚动内容，边构建边记每帖字符行范围 postLineRanges，供 ↑↓ 行 ↔ o 帖子预览换算
 	lines := make([]string, 0, 64)
-	m.postLineRanges = m.postLineRanges[:0] // 每帧重建：换行随宽度变化，旧范围不可复用
+	m.postLineRanges = m.postLineRanges[:0] // 每帧重建，换行随宽度变化，旧范围不可复用
 	for i, p := range m.posts {
 		startLen := len(lines) // 该帖起始行号
 
-		// 当前 postCursor 帖行首画黄色 ▸（ColAccent=ANSI226，复用 box.go 选中范式），其余帖 2 空格对齐
+		// 当前 postCursor 帖行标识 ▸ ，其余帖 2 空格对齐
 		cursorMark := "  "
 		if i == m.postCursor {
 			cursorMark = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸ ")
@@ -1109,7 +1109,7 @@ func (m *Model) viewImage() string {
 	}
 	// 关键：加载中和已加载都返回同一个完全固定的静态字符串（不含 spinner、不含 imgIndex 等会变的字段）
 	// 这样渲染器第一帧后触发 viewEquals 跳过 → 不清屏 → ImageLoadedMsg 直写的 Sixel 得以保留
-	// 切换图片时 view 也不变，跳过不被打破；图片序号信息被 Sixel 覆盖，用户看不到，故省略
+	// 切换图片时 view 也不变，跳过不被打破，图片序号信息被 Sixel 覆盖，用户看不到，故省略
 	return ui.Card("Image Preview",
 		lipgloss.NewStyle().Foreground(ui.ColAccent).Render("📷 Loading...  Esc back, ← → navigate"),
 		ui.ColAccent, m.width)

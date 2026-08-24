@@ -443,7 +443,7 @@ func HTMLToText(html string) (string, []string) {
 		if len(sub) < 2 || sub[1] == "" {
 			return "[img]"
 		}
-		// 过滤 Discourse 内置 emoji 图片（如 cdn.ldstatic.com/images/emoji/twemoji/xxx.png）
+		// 过滤 Discourse 内置 emoji 图片
 		// 这类是表情符号，不是内容图片，不纳入预览
 		if strings.Contains(sub[1], "/images/emoji/") {
 			return ""
@@ -484,7 +484,7 @@ type ImageLoadedMsg struct {
 	Err   error
 }
 
-// FetchImageCmd 下载并解码图片（走代理）
+// FetchImageCmd 下载并解码图片
 func FetchImageCmd(imgURL string, index int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
