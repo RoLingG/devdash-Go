@@ -514,3 +514,32 @@ func FetchImageCmd(imgURL string, index int) tea.Cmd {
 		return ImageLoadedMsg{Index: index, Img: img}
 	}
 }
+
+// scaleImage 最近邻等比缩放图片到 maxW×maxH 以内，只缩小不放大
+// 终端单元格像素尺寸无法在程序内获取，缩放上限由调用方估算传入，确保图片不超出 card 内容区
+func scaleImage(img image.Image, maxW, maxH int) image.Image {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= maxW && h <= maxH {
+		return img
+	}
+	ratio := float64(maxW) / float64(w)
+	if rh := float64(maxH) / float64(h); rh < ratio {
+		ratio = rh
+	}
+	nw, nh := int(float64(w)*ratio), int(float64(h)*ratio)
+	if nw < 1 {
+		nw = 1
+	}
+	if nh < 1 {
+		nh = 1
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, nw, nh))
+	for y := 0; y < nh; y++ {
+		sy := y * h / nh
+		for x := 0; x < nw; x++ {
+			dst.Set(x, y, img.At(b.Min.X+x*w/nw, b.Min.Y+sy))
+		}
+	}
+	return dst
+}

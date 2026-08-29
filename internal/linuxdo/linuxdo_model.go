@@ -90,13 +90,12 @@ type Model struct {
 	inputTarget inputTarget // 当前输入的是哪个字段
 
 	// 图片预览
-	imgURLs      []string // 当前帖子的图片 URL 列表
-	imgIndex     int      // 当前预览的图片索引
-	imgLoading   bool     // 正在加载图片
-	imgErr       error    // 图片加载错误
-	imgSixel     []byte   // 预编码的 Sixel 字节
-	imgHeight    int      // 图片像素高度（用于补换行估算）
-	sixelFlushed bool     // Sixel 已写入 stdout，viewImage 返回静态内容防覆盖
+	imgURLs       []string  // 当前帖子的图片 URL 列表
+	imgIndex      int       // 当前预览的图片索引
+	imgLoading    bool      // 正在加载图片，加载中 View 显示 Loading 串，为 false 且 imgSixel 就绪时切空白占位串
+	imgErr        error     // 图片加载错误
+	imgSixel      []byte    // 预编码的 Sixel 字节
+	imgFetchStart time.Time // 图片下载起点，下载过快时延迟展示让 Loading 提示停留约 1s
 
 	spinner spinner.Model // bubbles 加载动画
 }
@@ -151,7 +150,6 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.imgSixel = nil
 		m.imgErr = nil
 		m.imgLoading = false
-		m.sixelFlushed = false
 		return m, nil
 
 	case CategoriesMsg:
@@ -170,12 +168,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.topErr = msg.Err
 		} else if m.topPage == 0 {
-			// 首页：替换
+			// 首页则替换
 			m.topics = msg.Topics
 			m.topCursor = 0
 			m.topErr = nil
 		} else {
-			// 翻页：追加（无限滚动），按 ID 去重
+			// 翻页则追加（无限滚动），按 ID 去重
 			existing := make(map[int]bool, len(m.topics))
 			for _, t := range m.topics {
 				existing[t.ID] = true
@@ -265,31 +263,62 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		return m, nil
 
 	case ImageLoadedMsg:
-		m.imgLoading = false
 		if msg.Err != nil {
+			m.imgLoading = false
 			m.imgErr = msg.Err
 			return m, nil
 		}
 		if msg.Img == nil {
+			m.imgLoading = false
 			m.imgErr = fmt.Errorf("图片解码失败")
 			return m, nil
 		}
+		// 先缩放到内容区像素上限，防止图片压穿 card 边框
+		maxW := (m.width - 4) * cellPixelW
+		maxH := (m.height - 5) * cellPixelH
+		if maxW < cellPixelW {
+			maxW = cellPixelW
+		}
+		if maxH < cellPixelH {
+			maxH = cellPixelH
+		}
 		// Sixel 编码
+		scaled := scaleImage(msg.Img, maxW, maxH)
 		var buf strings.Builder
 		enc := sixel.NewEncoder(&buf)
 		enc.Colors = 256
-		if err := enc.Encode(msg.Img); err != nil {
+		if err := enc.Encode(scaled); err != nil {
+			m.imgLoading = false
 			m.imgErr = err
 			return m, nil
 		}
 		m.imgSixel = []byte(buf.String())
-		m.imgHeight = msg.Img.Bounds().Dy()
 		m.imgErr = nil
-		// 直写 stdout：清屏归位 + 写 Sixel 像素
-		// viewImage() 返回固定串使渲染器短路，不覆盖 Sixel 入口的光标失步由退出时的全量重绘兜底
-		os.Stdout.Write([]byte("\x1b[2J\x1b[H")) // 清屏 + 光标归位 (0,0)
-		os.Stdout.Write(m.imgSixel)              // Sixel DCS 像素数据
-		m.sixelFlushed = true
+		// 下载过快则延迟到满 minImgLoadingTime 再进入展示，让 Loading 提示停留 1s
+		// imgLoading 保持 true，串不切换，渲染器比对相同跳过重绘，Loading 卡片得以保留
+		if elapsed := time.Since(m.imgFetchStart); elapsed < minImgLoadingTime {
+			return m, flushSixelCmd(m.imgIndex, minImgLoadingTime-elapsed)
+		}
+		// 已超过最小停留则直接进入展示，imgLoading 置 false 切到空白占位串
+		// 本帧末渲染器重绘出足高空白 card，下一轮 showImageMsg 才叠图
+		m.imgLoading = false
+		return m, showImageCmd(m.imgIndex)
+
+	case flushSixelMsg:
+		// 延迟到期进入展示，切空白占位串和下一轮叠图
+		// 切图/Esc 后 imgIndex 或 mode 已变，msg.Index 对不上即跳过，防旧定时器误触发
+		if m.mode == viewImage && msg.Index == m.imgIndex && m.imgSixel != nil {
+			m.imgLoading = false
+			return m, showImageCmd(m.imgIndex)
+		}
+		return m, nil
+
+	case showImageMsg:
+		// card 字符层已输出完成，此时定位到内容区左上角写入 Sixel，图像呈现在边框之内
+		if m.mode == viewImage && msg.Index == m.imgIndex && !m.imgLoading && m.imgSixel != nil {
+			os.Stdout.Write([]byte(imgOriginSeq))
+			os.Stdout.Write(m.imgSixel)
+		}
 		return m, nil
 	}
 
@@ -405,7 +434,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 				m.imgLoading = true
 				m.imgErr = nil
 				m.imgSixel = nil
-				m.sixelFlushed = false
+				m.imgFetchStart = time.Now()
 				m.mode = viewImage
 				return m, tea.Batch(FetchImageCmd(m.imgURLs[0], 0), m.spinner.Tick)
 			}
@@ -417,8 +446,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 			m.imgLoading = true
 			m.imgErr = nil
 			m.imgSixel = nil
-			m.sixelFlushed = false
-			return m, tea.Batch(FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
+			m.imgFetchStart = time.Now()
+			// 切图时串变化触发全量重绘，清掉上一张的 Sixel 像素并回到加载提示
+			// 新图加载完成后由二段式时序重新叠入
+			return m, tea.Batch(clearScreenCmd(), FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
 		}
 	case "right":
 		// viewImage 中切换下一张
@@ -427,8 +458,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 			m.imgLoading = true
 			m.imgErr = nil
 			m.imgSixel = nil
-			m.sixelFlushed = false
-			return m, tea.Batch(FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
+			m.imgFetchStart = time.Now()
+			// 切图时串变化触发全量重绘，清掉上一张的 Sixel 像素并回到加载提示
+			// 新图加载完成后由二段式时序重新叠入
+			return m, tea.Batch(clearScreenCmd(), FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
 		}
 	}
 	return m, nil
@@ -652,7 +685,7 @@ func (m *Model) goBack() (*Model, tea.Cmd) {
 		m.searchQuery = ""
 		m.searchErr = nil
 	case viewImage:
-		// 退出预览：先 ClearScreen（置 s.clear 标志，不立即清屏），再 exitImageMsg 切回帖子
+		// 退出预览时先发 ClearScreen（只置 s.clear 标志，不立即清屏），随后 exitImageMsg 切回帖子
 		// 利用 s.clear 跨 viewEquals 短路保留，切视图时触发全量重绘清掉 Sixel + 重画边框
 		return m, tea.Sequence(clearScreenCmd(), exitImageCmd())
 	}
@@ -671,6 +704,40 @@ func exitImageCmd() tea.Cmd {
 // clearScreenCmd 包装 tea.ClearScreen() 为 Cmd
 func clearScreenCmd() tea.Cmd {
 	return func() tea.Msg { return tea.ClearScreen() }
+}
+
+// minImgLoadingTime 加载提示的最小停留时长，图片下载过快时延迟展示以保证提示可读
+const minImgLoadingTime = 1 * time.Second
+
+// 终端单元格像素尺寸无法在程序内获取，按 Windows Terminal 默认字体取典型值
+// 图片缩放上限由它换算，不同终端字体下显示不适配时调整这两个值即可
+const (
+	cellPixelW = 10
+	cellPixelH = 18
+)
+
+// imgOriginSeq 把光标定位到 card 内容区左上角，前面的上边框、标题和空行占 3 行，左侧边框与 padding 占 2 列，合起来是第 4 行第 3 列
+const imgOriginSeq = "\x1b[4;3H"
+
+// flushSixelMsg 延迟展示的定时消息，携带发起时的 imgIndex 防止切图后旧定时器误触发
+type flushSixelMsg struct {
+	Index int
+}
+
+// flushSixelCmd 间隔 d 后发 flushSixelMsg，用于加载提示最小停留
+func flushSixelCmd(index int, d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return flushSixelMsg{Index: index} })
+}
+
+// showImageMsg 通知叠图，此时空白占位 card 已由渲染器画好，可以放心直写 Sixel 进内容区
+type showImageMsg struct {
+	Index int
+}
+
+// showImageCmd 延迟发 showImageMsg，渲染器按帧率批量输出，立即发送会让图像先于
+// 空白 card 的重绘落盘，其后的字符输出会遮挡图像，因此预留一个输出周期的窗口
+func showImageCmd(index int) tea.Cmd {
+	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return showImageMsg{Index: index} })
 }
 
 func (m *Model) fetchCurrentTopics() tea.Cmd {
@@ -1100,6 +1167,7 @@ func (m *Model) viewSearch(cardWidth int) string {
 }
 
 // viewImage Sixel 全屏图片预览（主程序会绕过 tab/status 布局直接全屏输出）
+// card 与其他模块一致固定贴满整屏，加载中显示 Loading，加载完内容区留空白行由图像层叠入
 func (m *Model) viewImage() string {
 	// 加载失败：返回固定错误卡片
 	if m.imgErr != nil {
@@ -1107,12 +1175,25 @@ func (m *Model) viewImage() string {
 		errContent += lipgloss.NewStyle().Foreground(ui.ColMuted).Render("Esc back, ← → navigate")
 		return ui.Card("Image Preview", errContent, ui.ColRed, m.width)
 	}
-	// 关键：加载中和已加载都返回同一个完全固定的静态字符串（不含 spinner、不含 imgIndex 等会变的字段）
-	// 这样渲染器第一帧后触发 viewEquals 跳过 → 不清屏 → ImageLoadedMsg 直写的 Sixel 得以保留
-	// 切换图片时 view 也不变，跳过不被打破，图片序号信息被 Sixel 覆盖，用户看不到，故省略
-	return ui.Card("Image Preview",
-		lipgloss.NewStyle().Foreground(ui.ColAccent).Render("📷 Loading...  Esc back, ← → navigate"),
-		ui.ColAccent, m.width)
+	title := fmt.Sprintf("Image Preview [%d/%d]", m.imgIndex+1, len(m.imgURLs))
+	// 内容区固定 m.height-4 行（减上边框/标题/MarginBottom 空行/下边框），card 贴满整屏
+	innerRows := m.height - 4
+	if innerRows < 3 {
+		innerRows = 3
+	}
+	var content string
+	if m.imgLoading || m.imgSixel == nil {
+		// 加载中内容为提示 3 行，再补空行撑满内容区
+		content = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("📷 Loading...") + "\n\n" +
+			lipgloss.NewStyle().Foreground(ui.ColAccent).Render("Esc back, ← → navigate")
+		if pad := innerRows - 3; pad > 0 {
+			content += strings.Repeat("\n", pad)
+		}
+	} else {
+		// 已加载后内容区全部留白（Repeat 尾部会多出一行，因此行数减 1），图片由图像层叠入
+		content = strings.Repeat("\n", innerRows-1)
+	}
+	return ui.Card(title, content, ui.ColAccent, m.width)
 }
 
 // wrapLine 按显示宽度将长行切成多行（中文/emoji 计 2 列），用于回复内容完整换行
