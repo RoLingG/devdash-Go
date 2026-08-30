@@ -81,7 +81,7 @@ func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Active }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case LoadMsg:
 		if msg.Err != nil {
@@ -89,7 +89,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.loaded = true
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.configPath)
-			return m, nil
+			return nil
 		}
 		m.root = msg.Root
 		m.loaded = true
@@ -109,21 +109,21 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.input.Prompt = "Config file path:"
 			m.input.Open(m.dirPath)
 			m.dirListing = false
-			return m, nil
+			return nil
 		}
 		m.dirListing = true
 		m.dirPath = msg.Dir
 		m.dirList.SetItems(msg.Files)
 		m.input.Active = false
-		return m, nil
+		return nil
 
 	case tea.PasteMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, nil)
+			return m.input.Update(msg, nil)
 		}
 		m.filter += msg.Content
 		m.rebuildLines()
-		return m, nil
+		return nil
 
 	case tea.KeyPressMsg:
 		key := msg.String()
@@ -140,17 +140,17 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.configPath = fullPath
 				m.dirListing = false
 				m.errMsg = ""
-				return m, tea.Batch(LoadFileCmd(fullPath), ui.UpdateCfgCmd("configPath", fullPath))
+				return tea.Batch(LoadFileCmd(fullPath), ui.UpdateCfgCmd("configPath", fullPath))
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Config file path:"
 				m.input.Open(m.dirPath)
 			}
-			return m, nil
+			return nil
 		}
 
 		if m.input.Active {
-			return m, tea.Batch(
+			return tea.Batch(
 				m.input.Update(msg, func(path string) func() tea.Msg {
 					if path != "" {
 						m.errMsg = ""
@@ -199,9 +199,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+r":
 			if m.configPath != "" {
 				if m.reloadFromCache() {
-					return m, nil
+					return nil
 				}
-				return m, LoadFileCmd(m.configPath)
+				return LoadFileCmd(m.configPath)
 			}
 		case "/":
 			m.input.Prompt = "Config file path:"
@@ -232,7 +232,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			}
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) View() string {

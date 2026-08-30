@@ -135,12 +135,12 @@ func (m *Model) SetUserAgent(ua string) {
 	m.userAgent = ua
 }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return cmd
 
 	case exitImageMsg:
 		// ClearScreen 已置 s.scr.clear 后才切状态，此轮 viewEquals 失效 → flush 全量重绘
@@ -150,7 +150,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.imgSixel = nil
 		m.imgErr = nil
 		m.imgLoading = false
-		return m, nil
+		return nil
 
 	case CategoriesMsg:
 		m.catLoading = false
@@ -161,7 +161,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.catCursor = 0
 			m.catErr = nil
 		}
-		return m, nil
+		return nil
 
 	case TopicsMsg:
 		m.topLoading = false
@@ -186,7 +186,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.topErr = nil
 		}
 		m.topFullPage = msg.FullPage
-		return m, nil
+		return nil
 
 	case TopicDetailMsg:
 		m.postLoading = false
@@ -209,10 +209,10 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			// 如果有更多帖子，加载剩余的
 			if len(msg.Stream) > 0 {
 				m.postStreamLoading = true
-				return m, tea.Batch(FetchPostStreamCmd(m.postTopicID, msg.Stream, m.cookie, m.userAgent), m.spinner.Tick)
+				return tea.Batch(FetchPostStreamCmd(m.postTopicID, msg.Stream, m.cookie, m.userAgent), m.spinner.Tick)
 			}
 		}
-		return m, nil
+		return nil
 
 	case PostStreamMsg:
 		if msg.Err == nil {
@@ -225,12 +225,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			// 链式加载：还有剩余则继续
 			if len(msg.Remaining) > 0 {
 				m.postStream = msg.Remaining
-				return m, tea.Batch(FetchPostStreamCmd(msg.TopicID, msg.Remaining, m.cookie, m.userAgent), m.spinner.Tick)
+				return tea.Batch(FetchPostStreamCmd(msg.TopicID, msg.Remaining, m.cookie, m.userAgent), m.spinner.Tick)
 			}
 		}
 		m.postStream = nil
 		m.postStreamLoading = false
-		return m, nil
+		return nil
 
 	case SearchMsg:
 		m.searchLoading = false
@@ -260,18 +260,18 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.searchMore = msg.More
 			m.searchErr = nil
 		}
-		return m, nil
+		return nil
 
 	case ImageLoadedMsg:
 		if msg.Err != nil {
 			m.imgLoading = false
 			m.imgErr = msg.Err
-			return m, nil
+			return nil
 		}
 		if msg.Img == nil {
 			m.imgLoading = false
 			m.imgErr = fmt.Errorf("图片解码失败")
-			return m, nil
+			return nil
 		}
 		// 先缩放到内容区像素上限，防止图片压穿 card 边框
 		maxW := (m.width - 4) * cellPixelW
@@ -290,28 +290,28 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		if err := enc.Encode(scaled); err != nil {
 			m.imgLoading = false
 			m.imgErr = err
-			return m, nil
+			return nil
 		}
 		m.imgSixel = []byte(buf.String())
 		m.imgErr = nil
 		// 下载过快则延迟到满 minImgLoadingTime 再进入展示，让 Loading 提示停留 1s
 		// imgLoading 保持 true，串不切换，渲染器比对相同跳过重绘，Loading 卡片得以保留
 		if elapsed := time.Since(m.imgFetchStart); elapsed < minImgLoadingTime {
-			return m, flushSixelCmd(m.imgIndex, minImgLoadingTime-elapsed)
+			return flushSixelCmd(m.imgIndex, minImgLoadingTime-elapsed)
 		}
 		// 已超过最小停留则直接进入展示，imgLoading 置 false 切到空白占位串
 		// 本帧末渲染器重绘出足高空白 card，下一轮 showImageMsg 才叠图
 		m.imgLoading = false
-		return m, showImageCmd(m.imgIndex)
+		return showImageCmd(m.imgIndex)
 
 	case flushSixelMsg:
 		// 延迟到期进入展示，切空白占位串和下一轮叠图
 		// 切图/Esc 后 imgIndex 或 mode 已变，msg.Index 对不上即跳过，防旧定时器误触发
 		if m.mode == viewImage && msg.Index == m.imgIndex && m.imgSixel != nil {
 			m.imgLoading = false
-			return m, showImageCmd(m.imgIndex)
+			return showImageCmd(m.imgIndex)
 		}
-		return m, nil
+		return nil
 
 	case showImageMsg:
 		// card 字符层已输出完成，此时定位到内容区左上角写入 Sixel，图像呈现在边框之内
@@ -319,7 +319,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			os.Stdout.Write([]byte(imgOriginSeq))
 			os.Stdout.Write(m.imgSixel)
 		}
-		return m, nil
+		return nil
 	}
 
 	// 输入框活跃时，所有按键交给 input 处理
@@ -362,38 +362,38 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 					m.spinner.Tick,
 				)
 			})
-			return m, cmd
+			return cmd
 		case tea.PasteMsg:
-			return m, m.input.Update(msg, nil)
+			return m.input.Update(msg, nil)
 		}
-		return m, nil
+		return nil
 	}
 
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
-	return m, nil
+	return nil
 }
 
-func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+f":
 		if m.cookie == "" {
-			return m, nil
+			return nil
 		}
 		m.inputTarget = inputSearch
 		m.input.Prompt = "Search:"
 		m.input.Open("")
-		return m, nil
+		return nil
 	case "/":
 		m.inputTarget = inputCookie
 		m.input.Prompt = "Cookie:"
 		m.input.Open(m.cookie)
-		return m, nil
+		return nil
 	case "ctrl+u":
 		m.cookie = ""
-		return m, nil
+		return nil
 	case "ctrl+r":
 		return m.refresh()
 	case "enter":
@@ -436,7 +436,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 				m.imgSixel = nil
 				m.imgFetchStart = time.Now()
 				m.mode = viewImage
-				return m, tea.Batch(FetchImageCmd(m.imgURLs[0], 0), m.spinner.Tick)
+				return tea.Batch(FetchImageCmd(m.imgURLs[0], 0), m.spinner.Tick)
 			}
 		}
 	case "left":
@@ -449,7 +449,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 			m.imgFetchStart = time.Now()
 			// 切图时串变化触发全量重绘，清掉上一张的 Sixel 像素并回到加载提示
 			// 新图加载完成后由二段式时序重新叠入
-			return m, tea.Batch(clearScreenCmd(), FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
+			return tea.Batch(clearScreenCmd(), FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
 		}
 	case "right":
 		// viewImage 中切换下一张
@@ -461,13 +461,13 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 			m.imgFetchStart = time.Now()
 			// 切图时串变化触发全量重绘，清掉上一张的 Sixel 像素并回到加载提示
 			// 新图加载完成后由二段式时序重新叠入
-			return m, tea.Batch(clearScreenCmd(), FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
+			return tea.Batch(clearScreenCmd(), FetchImageCmd(m.imgURLs[m.imgIndex], m.imgIndex), m.spinner.Tick)
 		}
 	}
-	return m, nil
+	return nil
 }
 
-func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
+func (m *Model) moveCursor(delta int) tea.Cmd {
 	switch m.mode {
 	case viewCategories:
 		// 范围 0..len(categories)，0=Latest, 1+=categories
@@ -490,7 +490,7 @@ func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
 				m.topPage++
 				m.topLoading = true
 				m.topErr = nil
-				return m, tea.Batch(m.fetchCurrentTopics(), m.spinner.Tick)
+				return tea.Batch(m.fetchCurrentTopics(), m.spinner.Tick)
 			}
 		}
 	case viewPosts:
@@ -509,11 +509,11 @@ func (m *Model) moveCursor(delta int) (*Model, tea.Cmd) {
 			// 无限滚动：到底且有更多结果，加载下一页
 			if !m.searchLoadingMore && m.searchMore {
 				m.searchLoadingMore = true
-				return m, tea.Batch(FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, m.searchPage+1), m.spinner.Tick)
+				return tea.Batch(FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, m.searchPage+1), m.spinner.Tick)
 			}
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) setCursor(pos int) {
@@ -592,9 +592,9 @@ func (m *Model) postCursorByLine(line int) int {
 }
 
 // movePostCursor 按帖子条移动（PgUp/PgDn），postCursor ± delta 并把 postScroll 跳到目标帖起始行
-func (m *Model) movePostCursor(delta int) (*Model, tea.Cmd) {
+func (m *Model) movePostCursor(delta int) tea.Cmd {
 	if m.mode != viewPosts || len(m.posts) == 0 {
-		return m, nil
+		return nil
 	}
 	m.postCursor += delta
 	if m.postCursor < 0 {
@@ -605,7 +605,7 @@ func (m *Model) movePostCursor(delta int) (*Model, tea.Cmd) {
 		// 到底且还有未加载帖子 → 触发链式批量加载（下一批由 PostStreamMsg 续接）
 		if !m.postStreamLoading && len(m.postStream) > 0 {
 			m.postStreamLoading = true
-			return m, tea.Batch(FetchPostStreamCmd(m.postTopicID, m.postStream, m.cookie, m.userAgent), m.spinner.Tick)
+			return tea.Batch(FetchPostStreamCmd(m.postTopicID, m.postStream, m.cookie, m.userAgent), m.spinner.Tick)
 		}
 	}
 	// postScroll 跳到目标帖起始行，首屏渲染前 postLineRanges 为空时不跳（clamp 兜底）
@@ -615,14 +615,14 @@ func (m *Model) movePostCursor(delta int) (*Model, tea.Cmd) {
 	if m.postScroll < 0 {
 		m.postScroll = 0
 	}
-	return m, nil
+	return nil
 }
 
-func (m *Model) enterSelected() (*Model, tea.Cmd) {
+func (m *Model) enterSelected() tea.Cmd {
 	switch m.mode {
 	case viewCategories:
 		if len(m.categories) == 0 {
-			return m, nil
+			return nil
 		}
 		m.mode = viewTopics
 		m.topPage = 0
@@ -634,37 +634,37 @@ func (m *Model) enterSelected() (*Model, tea.Cmd) {
 		if m.catCursor == 0 {
 			m.topTitle = "Latest"
 			m.topCategory = 0
-			return m, tea.Batch(FetchLatestTopicsCmd(0, m.cookie, m.userAgent), m.spinner.Tick)
+			return tea.Batch(FetchLatestTopicsCmd(0, m.cookie, m.userAgent), m.spinner.Tick)
 		}
 		cat := m.categories[m.catCursor-1]
 		m.topTitle = cat.Name
 		m.topCategory = cat.ID
-		return m, tea.Batch(FetchCategoryTopicsCmd(cat.ID, 0, m.cookie, m.userAgent), m.spinner.Tick)
+		return tea.Batch(FetchCategoryTopicsCmd(cat.ID, 0, m.cookie, m.userAgent), m.spinner.Tick)
 	case viewTopics:
 		if len(m.topics) == 0 {
-			return m, nil
+			return nil
 		}
 		topic := m.topics[m.topCursor]
 		m.mode = viewPosts
 		m.postTopicID = topic.ID
 		m.postLoading = true
 		m.postErr = nil
-		return m, tea.Batch(FetchTopicDetailCmd(topic.ID, m.cookie, m.userAgent), m.spinner.Tick)
+		return tea.Batch(FetchTopicDetailCmd(topic.ID, m.cookie, m.userAgent), m.spinner.Tick)
 	case viewSearch:
 		if len(m.searchResults) == 0 {
-			return m, nil
+			return nil
 		}
 		result := m.searchResults[m.searchCursor]
 		m.mode = viewPosts
 		m.postTopicID = result.TopicID
 		m.postLoading = true
 		m.postErr = nil
-		return m, tea.Batch(FetchTopicDetailCmd(result.TopicID, m.cookie, m.userAgent), m.spinner.Tick)
+		return tea.Batch(FetchTopicDetailCmd(result.TopicID, m.cookie, m.userAgent), m.spinner.Tick)
 	}
-	return m, nil
+	return nil
 }
 
-func (m *Model) goBack() (*Model, tea.Cmd) {
+func (m *Model) goBack() tea.Cmd {
 	switch m.mode {
 	case viewPosts:
 		m.mode = viewTopics
@@ -687,9 +687,9 @@ func (m *Model) goBack() (*Model, tea.Cmd) {
 	case viewImage:
 		// 退出预览时先发 ClearScreen（只置 s.clear 标志，不立即清屏），随后 exitImageMsg 切回帖子
 		// 利用 s.clear 跨 viewEquals 短路保留，切视图时触发全量重绘清掉 Sixel + 重画边框
-		return m, tea.Sequence(clearScreenCmd(), exitImageCmd())
+		return tea.Sequence(clearScreenCmd(), exitImageCmd())
 	}
-	return m, nil
+	return nil
 }
 
 // exitImageMsg 退出图片预览的自定义消息
@@ -747,24 +747,24 @@ func (m *Model) fetchCurrentTopics() tea.Cmd {
 	return FetchLatestTopicsCmd(m.topPage, m.cookie, m.userAgent)
 }
 
-func (m *Model) refresh() (*Model, tea.Cmd) {
+func (m *Model) refresh() tea.Cmd {
 	if m.cookie == "" {
-		return m, nil
+		return nil
 	}
 	switch m.mode {
 	case viewCategories:
 		m.catLoading = true
 		m.catErr = nil
-		return m, tea.Batch(FetchCategoriesCmd(m.cookie, m.userAgent), m.spinner.Tick)
+		return tea.Batch(FetchCategoriesCmd(m.cookie, m.userAgent), m.spinner.Tick)
 	case viewTopics:
 		m.topLoading = true
 		m.topErr = nil
-		return m, tea.Batch(m.fetchCurrentTopics(), m.spinner.Tick)
+		return tea.Batch(m.fetchCurrentTopics(), m.spinner.Tick)
 	case viewPosts:
 		if m.postTopicID > 0 {
 			m.postLoading = true
 			m.postErr = nil
-			return m, tea.Batch(FetchTopicDetailCmd(m.postTopicID, m.cookie, m.userAgent), m.spinner.Tick)
+			return tea.Batch(FetchTopicDetailCmd(m.postTopicID, m.cookie, m.userAgent), m.spinner.Tick)
 		}
 	case viewSearch:
 		if m.searchQuery != "" {
@@ -773,10 +773,10 @@ func (m *Model) refresh() (*Model, tea.Cmd) {
 			m.searchPage = 0
 			m.searchMore = false
 			m.searchLoadingMore = false
-			return m, tea.Batch(FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, 1), m.spinner.Tick)
+			return tea.Batch(FetchSearchCmd(m.searchQuery, m.cookie, m.userAgent, 1), m.spinner.Tick)
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) View() string {

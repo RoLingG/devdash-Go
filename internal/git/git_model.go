@@ -118,16 +118,15 @@ func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Active }
 
-// Update 处理消息
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		if !m.loading {
-			return m, nil
+			return nil
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return cmd
 	case InfoMsg:
 		m.info = Info(msg)
 		m.loaded = true
@@ -147,19 +146,19 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.err = fmt.Errorf("no git repos found in: %s", msg.Dir)
 			m.input.Open(m.dirPath)
 			m.dirListing = false
-			return m, nil
+			return nil
 		}
 		m.dirListing = true
 		m.dirPath = msg.Dir
 		m.dirList.SetItems(msg.Repos)
 		m.input.Active = false
-		return m, nil
+		return nil
 
 	case tea.PasteMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, nil)
+			return m.input.Update(msg, nil)
 		}
-		return m, nil
+		return nil
 
 	case tea.KeyPressMsg:
 		key := msg.String()
@@ -177,17 +176,17 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.dirListing = false
 				m.loading = true
 				m.err = nil
-				return m, tea.Batch(LoadInfoFromDirCmd(fullPath), ui.UpdateCfgCmd("repo", fullPath), m.spinner.Tick)
+				return tea.Batch(LoadInfoFromDirCmd(fullPath), ui.UpdateCfgCmd("repo", fullPath), m.spinner.Tick)
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Repository path:"
 				m.input.Open(m.dirPath)
 			}
-			return m, nil
+			return nil
 		}
 
 		if m.input.Active {
-			return m, tea.Batch(
+			return tea.Batch(
 				m.input.Update(msg, func(path string) func() tea.Msg {
 					if path == "" {
 						path = "."
@@ -238,15 +237,15 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+r":
 			if m.repoPath != "" {
 				if m.reloadFromCache() {
-					return m, nil
+					return nil
 				}
 				m.loading = true
 				m.err = nil
-				return m, tea.Batch(func() tea.Msg { return LoadInfoFromDir(m.repoPath) }, m.spinner.Tick) // 缓存未命中
+				return tea.Batch(func() tea.Msg { return LoadInfoFromDir(m.repoPath) }, m.spinner.Tick) // 缓存未命中
 			}
 		}
 	}
-	return m, nil
+	return nil
 }
 
 // View 渲染视图

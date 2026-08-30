@@ -126,10 +126,7 @@ func TestWeatherUpdateMsg(t *testing.T) {
 	// 正常数据
 	m := newWeatherModel()
 	m.loading = true
-	nm, _ := m.Update(Msg{Data: sampleWeather()})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(Msg{Data: sampleWeather()})
 	if !m.loaded {
 		t.Error("Msg 后 loaded 应为 true")
 	}
@@ -204,10 +201,7 @@ func TestWeatherUpdateRefreshAndInput(t *testing.T) {
 	// ctrl+r 刷新
 	m := newWeatherModel()
 	m.city = "Beijing"
-	nm, cmd := m.Update(kp("ctrl+r"))
-	if nm != m {
-		t.Error("ctrl+r 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Error("ctrl+r 应返回 FetchFromCityCmd")
 	}
@@ -217,14 +211,14 @@ func TestWeatherUpdateRefreshAndInput(t *testing.T) {
 
 	// city 为空时 ctrl+r 无 Cmd
 	m2 := newWeatherModel()
-	if _, cmd := m2.Update(kp("ctrl+r")); cmd != nil {
+	if cmd := m2.Update(kp("ctrl+r")); cmd != nil {
 		t.Error("city 为空时 ctrl+r 不应返回 Cmd")
 	}
 
 	// / 打开输入框
 	m3 := newWeatherModel()
 	m3.city = "Beijing"
-	_, cmd3 := m3.Update(kp("/"))
+	cmd3 := m3.Update(kp("/"))
 	if cmd3 != nil {
 		t.Error("按 / 不应返回 Cmd")
 	}

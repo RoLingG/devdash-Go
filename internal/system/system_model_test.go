@@ -75,10 +75,7 @@ func TestSystemUpdateSysInfoMsg(t *testing.T) {
 	// 正常数据
 	m := newSystemModel()
 	m.loading = true
-	nm, _ := m.Update(sampleSysInfo())
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(sampleSysInfo())
 	if !m.loaded {
 		t.Error("SysInfoMsg 后 loaded 应为 true")
 	}
@@ -111,10 +108,7 @@ func TestSystemUpdateProcMsg(t *testing.T) {
 		{PID: 2, Name: "go.exe", CPU: 60, MemMB: 50},
 	}
 	m.filter = "go"
-	nm, _ := m.Update(ProcMsg{Processes: procs})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(ProcMsg{Processes: procs})
 	if len(m.process) != 2 {
 		t.Errorf("process = %d 项, want 2", len(m.process))
 	}
@@ -133,10 +127,7 @@ func TestSystemUpdateProcMsg(t *testing.T) {
 
 func TestSystemUpdateSysTickMsg(t *testing.T) {
 	m := newSystemModel()
-	nm, cmd := m.Update(SysTickMsg{})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(SysTickMsg{})
 	if cmd == nil {
 		t.Error("SysTickMsg 应返回 Batch Cmd")
 	}
@@ -156,10 +147,7 @@ func TestSystemUpdateKeys(t *testing.T) {
 
 	// ctrl+r 刷新
 	m2 := newSystemModel()
-	nm, cmd := m2.Update(kp("ctrl+r"))
-	if nm != m2 {
-		t.Error("ctrl+r 应返回同一 Model 指针")
-	}
+	cmd := m2.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Error("ctrl+r 应返回 Batch Cmd")
 	}
@@ -169,7 +157,7 @@ func TestSystemUpdateKeys(t *testing.T) {
 
 	// / 打开过滤输入框
 	m3 := newSystemModel()
-	_, cmd3 := m3.Update(kp("/"))
+	cmd3 := m3.Update(kp("/"))
 	if cmd3 != nil {
 		t.Error("按 / 不应返回 Cmd")
 	}

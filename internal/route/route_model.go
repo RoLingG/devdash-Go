@@ -106,33 +106,33 @@ func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 
 func (m *Model) InputActive() bool { return m.input.Active || m.addOverlay }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		if !m.loading {
-			return m, nil
+			return nil
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return cmd
 	case RoutesMsg:
 		m.loading = false
 		m.loaded = true
 		if msg.Err != nil {
-			return m, m.err(msg.Err)
+			return m.err(msg.Err)
 		}
 		m.routes = msg.Routes
 		m.ifaces = msg.Ifaces
 		m.msg = ""
-		return m, nil
+		return nil
 
 	case clearMsgMsg:
 		m.msg = ""
-		return m, nil
+		return nil
 
 	case RouteActionMsg:
 		if msg.Err != nil {
-			return m, m.err(msg.Err)
+			return m.err(msg.Err)
 		} else if msg.IsAdd {
 			m.msg = "Route added successfully"
 			m.msgIsErr = false
@@ -141,7 +141,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.msgIsErr = false
 		}
 		// 刷新路由表
-		return m, m.loadRoutesCmd()
+		return m.loadRoutesCmd()
 
 	case tea.KeyPressMsg:
 		// 添加 overlay 模式
@@ -150,7 +150,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		}
 		return m.handleKey(msg)
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) err(e error) tea.Cmd {
@@ -159,11 +159,11 @@ func (m *Model) err(e error) tea.Cmd {
 	return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return clearMsgMsg{} })
 }
 
-func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "ctrl+r":
 		m.loading = true
-		return m, tea.Batch(m.loadRoutesCmd(), m.spinner.Tick)
+		return tea.Batch(m.loadRoutesCmd(), m.spinner.Tick)
 
 	case "tab":
 		if m.mode == viewRoutes {
@@ -176,16 +176,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 
 	case "ctrl+a":
 		if !m.isAdmin {
-			return m, m.err(fmt.Errorf("需要管理员权限才能添加路由"))
+			return m.err(fmt.Errorf("需要管理员权限才能添加路由"))
 		}
 		m.openAddOverlay()
 
 	case "ctrl+d":
 		if !m.isAdmin {
-			return m, m.err(fmt.Errorf("需要管理员权限才能删除路由"))
+			return m.err(fmt.Errorf("需要管理员权限才能删除路由"))
 		}
 		if m.mode == viewRoutes && len(m.routes) > 0 {
-			return m, m.deleteSelected()
+			return m.deleteSelected()
 		}
 
 	case "ctrl+s":
@@ -195,7 +195,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	case "ctrl+l":
 		// 从配置文件加载并应用保存的路由
 		if !m.isAdmin {
-			return m, m.err(fmt.Errorf("需要管理员权限才能加载路由"))
+			return m.err(fmt.Errorf("需要管理员权限才能加载路由"))
 		}
 		return m.loadSavedRoutes()
 
@@ -216,21 +216,21 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	case "pgdown":
 		m.moveCursor(10)
 	}
-	return m, nil
+	return nil
 }
 
-func (m *Model) handleAddKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
+func (m *Model) handleAddKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "esc":
 		m.addOverlay = false
-		return m, nil
+		return nil
 
 	case "tab":
 		m.addField = (m.addField + 1) % 5
-		return m, nil
+		return nil
 
 	case "enter":
-		return m, m.submitAdd()
+		return m.submitAdd()
 
 	case "backspace":
 		m.backspaceAddField()
@@ -242,7 +242,7 @@ func (m *Model) handleAddKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 			m.appendToField(s)
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) totalItems() int {
@@ -384,7 +384,7 @@ func (m *Model) deleteSelected() tea.Cmd {
 }
 
 // saveRoutes 保存当前静态路由到配置文件
-func (m *Model) saveRoutes() (*Model, tea.Cmd) {
+func (m *Model) saveRoutes() tea.Cmd {
 	var saved []ui.RouteConfig
 	for _, r := range m.routes {
 		if r.IsStatic && !(r.Dest == "0.0.0.0" && r.PrefixLen == 0) {
@@ -399,12 +399,12 @@ func (m *Model) saveRoutes() (*Model, tea.Cmd) {
 		}
 	}
 	if len(saved) == 0 {
-		return m, m.err(fmt.Errorf("没有可保存的静态路由"))
+		return m.err(fmt.Errorf("没有可保存的静态路由"))
 	}
 	m.savedRoutes = saved
 	m.msg = fmt.Sprintf("已保存 %d 条静态路由", len(saved))
 	m.msgIsErr = false
-	return m, tea.Batch(
+	return tea.Batch(
 		tea.Tick(3*time.Second, func(time.Time) tea.Msg { return clearMsgMsg{} }),
 		ui.UpdateCfgDataCmd("savedRoutes", saved),
 	)
@@ -412,12 +412,12 @@ func (m *Model) saveRoutes() (*Model, tea.Cmd) {
 
 // loadSavedRoutes 从配置文件加载并应用保存的路由
 // 先获取系统当前路由，对比后只添加缺失的
-func (m *Model) loadSavedRoutes() (*Model, tea.Cmd) {
+func (m *Model) loadSavedRoutes() tea.Cmd {
 	if len(m.savedRoutes) == 0 {
-		return m, m.err(fmt.Errorf("没有已保存的路由配置"))
+		return m.err(fmt.Errorf("没有已保存的路由配置"))
 	}
 	routes := m.savedRoutes
-	return m, func() tea.Msg {
+	return func() tea.Msg {
 		// 获取系统当前路由，用于去重
 		existing, err := GetRoutes()
 		if err != nil {

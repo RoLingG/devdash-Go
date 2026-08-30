@@ -136,7 +136,7 @@ func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Active || m.pageInput }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case LoadMsg:
 		if msg.Err != nil {
@@ -148,7 +148,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.input.Prompt = "Log file path:"
 				m.input.Open(m.logPath)
 			}
-			return m, nil
+			return nil
 		}
 		lines := msg.Lines
 		if lines == nil {
@@ -174,33 +174,33 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.input.Prompt = "Log file path:"
 			m.input.Open(m.dirPath)
 			m.dirListing = false
-			return m, nil
+			return nil
 		}
 		m.dirListing = true
 		m.dirPath = msg.Dir
 		m.dirList.SetItems(msg.Files)
 		m.input.Active = false
-		return m, nil
+		return nil
 
 	case TailDataMsg:
 		if msg.Done || msg.Err != nil {
 			// channel 关闭或出错，停止监听
 			m.tailFMode = false
-			return m, nil
+			return nil
 		}
 		// 追加新行到日志
 		m.all = append(m.all, msg.Lines...)
 		m.applyFilter()
 		// 继续接收下一块数据
-		return m, receiveTailCmd(m.tailCh)
+		return receiveTailCmd(m.tailCh)
 
 	case tea.PasteMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, nil)
+			return m.input.Update(msg, nil)
 		}
 		m.filter += msg.Content
 		m.applyFilter()
-		return m, nil
+		return nil
 
 	case tea.KeyPressMsg:
 		key := msg.String()
@@ -218,13 +218,13 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				m.dirListing = false
 				m.filter = ""
 				m.errMsg = ""
-				return m, tea.Batch(LoadFromFileCmd(fullPath), ui.UpdateCfgCmd("logPath", fullPath))
+				return tea.Batch(LoadFromFileCmd(fullPath), ui.UpdateCfgCmd("logPath", fullPath))
 			case "esc":
 				m.dirListing = false
 				m.input.Prompt = "Log file path:"
 				m.input.Open(m.dirPath)
 			}
-			return m, nil
+			return nil
 		}
 
 		// 页码跳转输入模式
@@ -252,7 +252,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 					m.pageInputValue += key
 				}
 			}
-			return m, nil
+			return nil
 		}
 
 		// Level filter 选择界面
@@ -277,11 +277,11 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			case "esc", "ctrl+l":
 				m.levelOverlay = false
 			}
-			return m, nil
+			return nil
 		}
 
 		if m.input.Active {
-			return m, tea.Batch(
+			return tea.Batch(
 				m.input.Update(msg, func(path string) func() tea.Msg {
 					if path != "" {
 						m.errMsg = ""
@@ -388,12 +388,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				info, err := os.Stat(m.logPath)
 				if err != nil {
 					m.tailFMode = false
-					return m, nil
+					return nil
 				}
 				offset := info.Size()
 				m.tailDone = make(chan struct{})
 				m.tailCh = watchFile(m.logPath, offset, m.tailDone)
-				return m, receiveTailCmd(m.tailCh)
+				return receiveTailCmd(m.tailCh)
 			}
 			if !m.tailFMode && m.tailDone != nil {
 				// 关闭 goroutine
@@ -416,14 +416,14 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 				}
 				if m.reloadFromCache() {
 					if m.tailFMode {
-						return m, receiveTailCmd(m.tailCh)
+						return receiveTailCmd(m.tailCh)
 					}
-					return m, nil
+					return nil
 				}
 				if m.tailFMode {
-					return m, tea.Batch(LoadFromFileCmd(m.logPath), receiveTailCmd(m.tailCh))
+					return tea.Batch(LoadFromFileCmd(m.logPath), receiveTailCmd(m.tailCh))
 				}
-				return m, LoadFromFileCmd(m.logPath)
+				return LoadFromFileCmd(m.logPath)
 			}
 		case "enter":
 			m.applyFilter()
@@ -443,7 +443,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			}
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) applyFilter() {

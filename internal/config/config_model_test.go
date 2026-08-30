@@ -83,10 +83,7 @@ func TestConfigUpdateLoadMsg(t *testing.T) {
 	// 正常加载
 	m := newConfigModel()
 	m.configPath = "/tmp/config.json"
-	nm, _ := m.Update(LoadMsg{Root: sampleRoot()})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(LoadMsg{Root: sampleRoot()})
 	if !m.loaded {
 		t.Error("LoadMsg 后 loaded 应为 true")
 	}
@@ -99,10 +96,7 @@ func TestConfigUpdateLoadMsg(t *testing.T) {
 
 	// 错误 → 打开输入框
 	m2 := newConfigModel()
-	nm2, _ := m2.Update(LoadMsg{Err: errConfig})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m2.Update(LoadMsg{Err: errConfig})
 	if m2.errMsg == "" {
 		t.Error("LoadMsg 带错误时应设置 errMsg")
 	}
@@ -123,10 +117,7 @@ func (e *configErr) Error() string { return "parse failed" }
 func TestConfigUpdateDirMsg(t *testing.T) {
 	// 有文件 → 目录列表模式
 	m := newConfigModel()
-	nm, cmd := m.Update(DirMsg{Dir: "/etc", Files: []string{"a.json", "b.yaml"}})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(DirMsg{Dir: "/etc", Files: []string{"a.json", "b.yaml"}})
 	if cmd != nil {
 		t.Error("DirMsg 有文件时不应返回 Cmd")
 	}
@@ -137,10 +128,7 @@ func TestConfigUpdateDirMsg(t *testing.T) {
 	// 无文件 → 错误 + 输入框
 	m2 := newConfigModel()
 	m2.dirPath = "/empty"
-	nm2, cmd2 := m2.Update(DirMsg{Dir: "/empty", Files: nil})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd2 := m2.Update(DirMsg{Dir: "/empty", Files: nil})
 	if cmd2 != nil {
 		t.Error("无文件时不应返回 Cmd")
 	}
@@ -169,10 +157,7 @@ func TestConfigUpdateDirListingKeys(t *testing.T) {
 	}
 
 	// enter → 加载
-	nm, cmd := m.Update(kp("enter"))
-	if nm != m {
-		t.Error("enter 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("enter"))
 	if cmd == nil {
 		t.Error("enter 应返回 Batch Cmd")
 	}
@@ -292,23 +277,20 @@ func TestConfigUpdateRefreshAndInput(t *testing.T) {
 	// ctrl+r 刷新
 	m := newConfigModel()
 	m.configPath = "/tmp/config.json"
-	nm, cmd := m.Update(kp("ctrl+r"))
-	if nm != m {
-		t.Error("ctrl+r 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Error("ctrl+r 应返回 LoadFileCmd")
 	}
 
 	// 无 configPath → 无 Cmd
 	m2 := newConfigModel()
-	if _, cmd := m2.Update(kp("ctrl+r")); cmd != nil {
+	if cmd := m2.Update(kp("ctrl+r")); cmd != nil {
 		t.Error("无 configPath 时 ctrl+r 不应返回 Cmd")
 	}
 
 	// / 打开输入框
 	m3 := newConfigModel()
-	_, cmd3 := m3.Update(kp("/"))
+	cmd3 := m3.Update(kp("/"))
 	if cmd3 != nil {
 		t.Error("按 / 不应返回 Cmd")
 	}

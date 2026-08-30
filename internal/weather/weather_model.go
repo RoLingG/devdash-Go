@@ -48,22 +48,22 @@ func (m *Model) SetRecent(items []string) { m.input.SetRecent(items) }
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Active }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		if !m.loading {
-			return m, nil
+			return nil
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return cmd
 	case Msg:
 		if msg.Err != nil {
 			m.err = msg.Err
 			m.loaded = true
 			m.loading = false
 			m.input.Active = false
-			return m, nil
+			return nil
 		}
 		m.data = msg.Data
 		m.loaded = true
@@ -72,12 +72,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.input.Active = false
 	case tea.PasteMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, nil)
+			return m.input.Update(msg, nil)
 		}
-		return m, nil
+		return nil
 	case tea.KeyPressMsg:
 		if m.input.Active {
-			return m, tea.Batch(
+			return tea.Batch(
 				m.input.Update(msg, func(city string) func() tea.Msg {
 					if city != "" {
 						m.city = city
@@ -95,7 +95,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			if m.city != "" {
 				m.loading = true
 				m.err = nil
-				return m, tea.Batch(FetchFromCityCmd(m.city), m.spinner.Tick)
+				return tea.Batch(FetchFromCityCmd(m.city), m.spinner.Tick)
 			}
 		case "/":
 			m.input.Prompt = "City:"
@@ -122,7 +122,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.scroll = 1 << 30 // View 中会自动 clamp 到有效范围
 		}
 	}
-	return m, nil
+	return nil
 }
 
 // View 渲染视图

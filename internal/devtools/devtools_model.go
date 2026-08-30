@@ -66,25 +66,25 @@ func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Focused() }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case httpResultMsg:
 		// 只接受最新请求的响应，过期响应（reqID 不匹配）直接丢弃
 		if msg.reqID != m.reqID {
-			return m, nil
+			return nil
 		}
 		m.loading = false
 		m.result, m.resultErr = msg.result, msg.err
-		return m, nil
+		return nil
 	case tea.PasteMsg:
 		if m.input.Focused() {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
-			return m, cmd
+			return cmd
 		}
 	case tea.KeyPressMsg:
 		if m.input.Focused() {
-			return m, m.handleInputKey(msg)
+			return m.handleInputKey(msg)
 		}
 		var cmd tea.Cmd
 		switch msg.String() {
@@ -118,9 +118,9 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+p":
 			cmd = m.copyResult() // 复制当前结果到剪贴板
 		}
-		return m, cmd
+		return cmd
 	}
-	return m, nil
+	return nil
 }
 
 // handleInputKey 处理输入框活跃时的按键

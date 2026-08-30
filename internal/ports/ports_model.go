@@ -40,15 +40,15 @@ func (m *Model) UpdateSize(w, h int) { m.width = w; m.height = h }
 // InputActive 输入框是否活跃
 func (m *Model) InputActive() bool { return m.input.Active }
 
-func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case spinner.TickMsg:
 		if !m.loading {
-			return m, nil
+			return nil
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return cmd
 	case PortsMsg:
 		if msg.Err != nil {
 			m.err = msg.Err
@@ -59,12 +59,12 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		m.loading = false
 	case tea.PasteMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, nil)
+			return m.input.Update(msg, nil)
 		}
-		return m, nil
+		return nil
 	case tea.KeyPressMsg:
 		if m.input.Active {
-			return m, m.input.Update(msg, func(portStr string) func() tea.Msg {
+			return m.input.Update(msg, func(portStr string) func() tea.Msg {
 				if portStr != "" {
 					if port, err := strconv.Atoi(portStr); err == nil && port > 0 && port <= 65535 {
 						// 检查是否已存在
@@ -89,7 +89,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 		case "ctrl+r":
 			m.loading = true
 			m.err = nil
-			return m, tea.Batch(ScanPortsCmd(m.extra), m.spinner.Tick)
+			return tea.Batch(ScanPortsCmd(m.extra), m.spinner.Tick)
 		case "/":
 			m.input.Prompt = "Port:"
 			m.input.Open("")
@@ -105,7 +105,7 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 			m.scroll = 1 << 30
 		}
 	}
-	return m, nil
+	return nil
 }
 
 func (m *Model) View() string {

@@ -89,10 +89,7 @@ func TestLogUpdateLoadMsg(t *testing.T) {
 	m.logPath = "/tmp/test.log"
 	lines := sampleTestLines()
 
-	nm, _ := m.Update(LoadMsg{Lines: lines})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(LoadMsg{Lines: lines})
 	if !m.loaded {
 		t.Error("LoadMsg 后 loaded 应为 true")
 	}
@@ -113,10 +110,7 @@ func TestLogUpdateLoadMsg(t *testing.T) {
 	m2 := newLogModel()
 	m2.logPath = "/tmp/not_exist.log"
 	m2.input.Active = true
-	nm2, _ := m2.Update(LoadMsg{Err: os.ErrNotExist})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m2.Update(LoadMsg{Err: os.ErrNotExist})
 	if m2.errMsg == "" {
 		t.Error("LoadMsg 带错误时应设置 errMsg")
 	}
@@ -136,10 +130,7 @@ func TestLogUpdateLoadMsg(t *testing.T) {
 func TestLogUpdateDirMsg(t *testing.T) {
 	// 有文件 → 目录列表模式
 	m := newLogModel()
-	nm, cmd := m.Update(DirMsg{Dir: "/logs", Files: []string{"a.log", "b.log"}})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(DirMsg{Dir: "/logs", Files: []string{"a.log", "b.log"}})
 	if cmd != nil {
 		t.Error("DirMsg 有文件时不应返回 Cmd")
 	}
@@ -150,10 +141,7 @@ func TestLogUpdateDirMsg(t *testing.T) {
 	// 无文件 → 错误 + 打开输入框
 	m2 := newLogModel()
 	m2.dirPath = "/empty"
-	nm2, cmd2 := m2.Update(DirMsg{Dir: "/empty", Files: nil})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd2 := m2.Update(DirMsg{Dir: "/empty", Files: nil})
 	if cmd2 != nil {
 		t.Error("无文件时不应返回 Cmd")
 	}
@@ -176,10 +164,7 @@ func TestLogUpdateTailDataMsg(t *testing.T) {
 	m.tailFMode = true
 	ch := make(chan []byte, 1)
 	m.tailCh = ch
-	nm, cmd := m.Update(TailDataMsg{Lines: []Line{{Raw: "INFO new line", Level: "INFO"}}})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(TailDataMsg{Lines: []Line{{Raw: "INFO new line", Level: "INFO"}}})
 	if cmd == nil {
 		t.Error("TailDataMsg 有数据应返回 receiveTailCmd")
 	}
@@ -189,10 +174,7 @@ func TestLogUpdateTailDataMsg(t *testing.T) {
 
 	// Done=true → 停止监听
 	m2 := newLogModel()
-	nm2, cmd2 := m2.Update(TailDataMsg{Done: true})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd2 := m2.Update(TailDataMsg{Done: true})
 	if cmd2 != nil {
 		t.Error("Done=true 不应返回 Cmd")
 	}
@@ -213,10 +195,7 @@ func TestLogUpdatePaste(t *testing.T) {
 	// 输入框活跃 → 转发给 input
 	m := newLogModel()
 	m.input.Active = true
-	nm, cmd := m.Update(tea.PasteMsg{Content: "paste"})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(tea.PasteMsg{Content: "paste"})
 	if cmd != nil {
 		t.Error("输入框活跃时 Paste 不应返回 Cmd")
 	}
@@ -224,10 +203,7 @@ func TestLogUpdatePaste(t *testing.T) {
 	// 输入框不活跃 → 追加 filter
 	m2 := newLogModel()
 	m2.Update(LoadMsg{Lines: sampleTestLines()})
-	nm2, cmd2 := m2.Update(tea.PasteMsg{Content: "server"})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd2 := m2.Update(tea.PasteMsg{Content: "server"})
 	if cmd2 != nil {
 		t.Error("Paste 到 filter 不应返回 Cmd")
 	}
@@ -256,10 +232,7 @@ func TestLogUpdateDirListingKeys(t *testing.T) {
 	}
 
 	// enter → 加载选中文件
-	nm, cmd := m.Update(kp("enter"))
-	if nm != m {
-		t.Error("enter 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("enter"))
 	if cmd == nil {
 		t.Error("enter 应返回 Batch Cmd")
 	}
@@ -503,17 +476,14 @@ func TestLogUpdateRefresh(t *testing.T) {
 	// 有 logPath → 返回 LoadFromFileCmd
 	m := newLogModel()
 	m.logPath = "/tmp/x.log"
-	nm, cmd := m.Update(kp("ctrl+r"))
-	if nm != m {
-		t.Error("ctrl+r 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Error("ctrl+r 应返回 LoadFromFileCmd")
 	}
 
 	// 无 logPath → 无 Cmd
 	m2 := newLogModel()
-	if _, cmd := m2.Update(kp("ctrl+r")); cmd != nil {
+	if cmd := m2.Update(kp("ctrl+r")); cmd != nil {
 		t.Error("无 logPath 时 ctrl+r 不应返回 Cmd")
 	}
 }
@@ -529,10 +499,7 @@ func TestLogUpdateTailF(t *testing.T) {
 	m.Update(LoadMsg{Lines: sampleTestLines()})
 
 	// 打开 tail 模式 → 返回 receiveTailCmd
-	nm, cmd := m.Update(kp("ctrl+f"))
-	if nm != m {
-		t.Error("ctrl+f 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("ctrl+f"))
 	if cmd == nil {
 		t.Error("开启 tail 模式应返回 Cmd")
 	}
@@ -544,10 +511,7 @@ func TestLogUpdateTailF(t *testing.T) {
 	}
 
 	// 关闭 tail 模式 → close done
-	nm2, cmd2 := m.Update(kp("ctrl+f"))
-	if nm2 != m {
-		t.Error("再次 ctrl+f 应返回同一 Model 指针")
-	}
+	cmd2 := m.Update(kp("ctrl+f"))
 	if cmd2 != nil {
 		t.Error("关闭 tail 模式不应返回 Cmd")
 	}

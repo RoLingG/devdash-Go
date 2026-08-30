@@ -83,10 +83,7 @@ func TestLinuxDoUpdateMsg(t *testing.T) {
 	m := newLinuxdoModel()
 	m.catLoading = true
 	cats := []Category{{ID: 1, Name: "Dev"}, {ID: 2, Name: "Tech"}}
-	nm, cmd := m.Update(CategoriesMsg{Categories: cats})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(CategoriesMsg{Categories: cats})
 	if cmd != nil {
 		t.Error("CategoriesMsg 不应返回 Cmd")
 	}
@@ -143,10 +140,7 @@ func TestLinuxDoUpdateTopicDetail(t *testing.T) {
 	m.postTopicID = 5
 	m.postLoading = true
 	posts := []Post{{ID: 1, Username: "alice", PostNumber: 1, CreatedAt: "2026-08-01T12:00:00+08:00", Cooked: "<p>hi</p>"}}
-	nm, cmd := m.Update(TopicDetailMsg{Title: "T", Posts: posts, Stream: nil, TotalPosts: 1})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(TopicDetailMsg{Title: "T", Posts: posts, Stream: nil, TotalPosts: 1})
 	if cmd != nil {
 		t.Error("无剩余 stream 时不应返回 Cmd")
 	}
@@ -185,10 +179,7 @@ func TestLinuxDoUpdatePostStream(t *testing.T) {
 	m.posts = []Post{{ID: 1, Username: "a"}}
 	m.postStream = []int{2, 3, 4}
 	m.postStreamLoading = true
-	nm, cmd := m.Update(PostStreamMsg{TopicID: 5, Posts: []Post{{ID: 2, Username: "b"}}, Remaining: []int{3, 4}})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(PostStreamMsg{TopicID: 5, Posts: []Post{{ID: 2, Username: "b"}}, Remaining: []int{3, 4}})
 	if cmd == nil {
 		t.Error("有 Remaining 时应返回链式加载 Cmd")
 	}
@@ -203,7 +194,7 @@ func TestLinuxDoUpdatePostStream(t *testing.T) {
 	m2 := newLinuxdoModel()
 	m2.posts = []Post{{ID: 1}}
 	m2.postStreamLoading = true
-	_, cmd2 := m2.Update(PostStreamMsg{TopicID: 5, Posts: []Post{{ID: 2}}, Remaining: nil})
+	cmd2 := m2.Update(PostStreamMsg{TopicID: 5, Posts: []Post{{ID: 2}}, Remaining: nil})
 	if cmd2 != nil {
 		t.Error("无 Remaining 时不应返回 Cmd")
 	}
@@ -217,7 +208,7 @@ func TestLinuxDoUpdatePostStream(t *testing.T) {
 	// 错误 → 结束加载
 	m3 := newLinuxdoModel()
 	m3.postStreamLoading = true
-	_, cmd3 := m3.Update(PostStreamMsg{TopicID: 5, Err: errLD})
+	cmd3 := m3.Update(PostStreamMsg{TopicID: 5, Err: errLD})
 	if cmd3 != nil {
 		t.Error("错误时不应返回 Cmd")
 	}
@@ -301,7 +292,7 @@ func TestLinuxDoInputComplete(t *testing.T) {
 	m.input.Open("")
 	m.input.Value = "mytoken"
 	m.input.Cursor = 7
-	_, cmd := m.Update(kp("enter"))
+	cmd := m.Update(kp("enter"))
 	if cmd == nil {
 		t.Error("Cookie 提交应返回 UpdateCfgCmd")
 	}
@@ -327,7 +318,7 @@ func TestLinuxDoInputComplete(t *testing.T) {
 	m2.input.Open("")
 	m2.input.Value = "MyUA"
 	m2.input.Cursor = 4
-	_, cmd2 := m2.Update(kp("enter"))
+	cmd2 := m2.Update(kp("enter"))
 	if cmd2 == nil {
 		t.Error("UA 提交应返回 Batch Cmd")
 	}
@@ -348,7 +339,7 @@ func TestLinuxDoInputComplete(t *testing.T) {
 	m3.input.Open("")
 	m3.input.Value = "golang"
 	m3.input.Cursor = 6
-	_, cmd3 := m3.Update(kp("enter"))
+	cmd3 := m3.Update(kp("enter"))
 	if cmd3 == nil {
 		t.Error("搜索提交应返回 FetchSearchCmd")
 	}
@@ -370,7 +361,7 @@ func TestLinuxDoInputComplete(t *testing.T) {
 	m4.input.Active = true
 	m4.inputTarget = inputSearch
 	m4.input.Open("")
-	_, cmd4 := m4.Update(kp("enter"))
+	cmd4 := m4.Update(kp("enter"))
 	if cmd4 != nil {
 		t.Error("空值提交不应返回 Cmd")
 	}
@@ -379,7 +370,7 @@ func TestLinuxDoInputComplete(t *testing.T) {
 func TestLinuxDoHandleKey(t *testing.T) {
 	// ctrl+f 无 cookie → 忽略
 	m := newLinuxdoModel()
-	_, cmd := m.Update(kp("ctrl+f"))
+	cmd := m.Update(kp("ctrl+f"))
 	if cmd != nil {
 		t.Error("无 cookie 时 ctrl+f 不应返回 Cmd")
 	}
@@ -390,7 +381,7 @@ func TestLinuxDoHandleKey(t *testing.T) {
 	// ctrl+f 有 cookie → 搜索输入
 	m2 := newLinuxdoModel()
 	m2.cookie = "c"
-	_, cmd2 := m2.Update(kp("ctrl+f"))
+	cmd2 := m2.Update(kp("ctrl+f"))
 	if cmd2 != nil {
 		t.Error("ctrl+f 不应返回 Cmd")
 	}
@@ -404,7 +395,7 @@ func TestLinuxDoHandleKey(t *testing.T) {
 	// / 打开 Cookie 输入
 	m3 := newLinuxdoModel()
 	m3.cookie = "old"
-	_, cmd3 := m3.Update(kp("/"))
+	cmd3 := m3.Update(kp("/"))
 	if cmd3 != nil {
 		t.Error("按 / 不应返回 Cmd")
 	}
@@ -421,7 +412,7 @@ func TestLinuxDoHandleKey(t *testing.T) {
 	// ctrl+u 清空 cookie
 	m4 := newLinuxdoModel()
 	m4.cookie = "x"
-	_, cmd4 := m4.Update(kp("ctrl+u"))
+	cmd4 := m4.Update(kp("ctrl+u"))
 	if cmd4 != nil {
 		t.Error("ctrl+u 不应返回 Cmd")
 	}
@@ -491,7 +482,7 @@ func TestLinuxDoMoveCursorTopicsScroll(t *testing.T) {
 	m.topFullPage = true
 	m.topLoading = false
 	m.topPage = 0
-	_, cmd := m.Update(kp("down"))
+	cmd := m.Update(kp("down"))
 	if cmd == nil {
 		t.Fatal("满页到底 down 应返回下一页 Cmd")
 	}
@@ -508,7 +499,7 @@ func TestLinuxDoMoveCursorTopicsScroll(t *testing.T) {
 	m2.topics = []Topic{{ID: 1}, {ID: 2}, {ID: 3}}
 	m2.topCursor = 2
 	m2.topFullPage = false
-	_, cmd2 := m2.Update(kp("down"))
+	cmd2 := m2.Update(kp("down"))
 	if cmd2 != nil {
 		t.Error("未满页到底 down 不应返回 Cmd")
 	}
@@ -523,7 +514,7 @@ func TestLinuxDoMoveCursorSearchScroll(t *testing.T) {
 	m.searchMore = true
 	m.searchLoadingMore = false
 	m.searchPage = 1
-	_, cmd := m.Update(kp("down"))
+	cmd := m.Update(kp("down"))
 	if cmd == nil {
 		t.Fatal("有更多结果到底 down 应返回下一页 Cmd")
 	}
@@ -537,7 +528,7 @@ func TestLinuxDoMoveCursorSearchScroll(t *testing.T) {
 	m2.searchResults = []SearchResult{{TopicID: 1}}
 	m2.searchCursor = 0
 	m2.searchMore = false
-	_, cmd2 := m2.Update(kp("down"))
+	cmd2 := m2.Update(kp("down"))
 	if cmd2 != nil {
 		t.Error("无更多结果到底 down 不应返回 Cmd")
 	}
@@ -571,7 +562,7 @@ func TestLinuxDoEnterSelected(t *testing.T) {
 	m.categories = []Category{{ID: 1, Name: "Dev"}}
 	m.mode = viewCategories
 	m.catCursor = 0
-	_, cmd := m.Update(kp("enter"))
+	cmd := m.Update(kp("enter"))
 	if cmd == nil {
 		t.Fatal("Latest enter 应返回 Cmd")
 	}
@@ -587,7 +578,7 @@ func TestLinuxDoEnterSelected(t *testing.T) {
 	m2.categories = []Category{{ID: 1, Name: "Dev"}}
 	m2.mode = viewCategories
 	m2.catCursor = 1
-	_, cmd2 := m2.Update(kp("enter"))
+	cmd2 := m2.Update(kp("enter"))
 	if cmd2 == nil {
 		t.Fatal("分类 enter 应返回 Cmd")
 	}
@@ -598,7 +589,7 @@ func TestLinuxDoEnterSelected(t *testing.T) {
 	// 空分类
 	m3 := newLinuxdoModel()
 	m3.mode = viewCategories
-	if _, cmd3 := m3.Update(kp("enter")); cmd3 != nil {
+	if cmd3 := m3.Update(kp("enter")); cmd3 != nil {
 		t.Error("空分类 enter 不应返回 Cmd")
 	}
 
@@ -606,7 +597,7 @@ func TestLinuxDoEnterSelected(t *testing.T) {
 	m4 := newLinuxdoModel()
 	m4.mode = viewTopics
 	m4.topics = []Topic{{ID: 5, Title: "T"}}
-	_, cmd4 := m4.Update(kp("enter"))
+	cmd4 := m4.Update(kp("enter"))
 	if cmd4 == nil {
 		t.Fatal("topic enter 应返回 Cmd")
 	}
@@ -621,7 +612,7 @@ func TestLinuxDoEnterSelected(t *testing.T) {
 	m5 := newLinuxdoModel()
 	m5.mode = viewSearch
 	m5.searchResults = []SearchResult{{TopicID: 7}}
-	_, cmd5 := m5.Update(kp("enter"))
+	cmd5 := m5.Update(kp("enter"))
 	if cmd5 == nil {
 		t.Fatal("search enter 应返回 Cmd")
 	}
@@ -632,7 +623,7 @@ func TestLinuxDoEnterSelected(t *testing.T) {
 	// 空 search
 	m6 := newLinuxdoModel()
 	m6.mode = viewSearch
-	if _, cmd6 := m6.Update(kp("enter")); cmd6 != nil {
+	if cmd6 := m6.Update(kp("enter")); cmd6 != nil {
 		t.Error("空 search enter 不应返回 Cmd")
 	}
 }
@@ -647,7 +638,7 @@ func TestLinuxDoGoBack(t *testing.T) {
 	m.postTopicID = 1
 	m.postStreamLoading = true
 	m.postTitle = "T"
-	_, cmd := m.Update(kp("esc"))
+	cmd := m.Update(kp("esc"))
 	if cmd != nil {
 		t.Error("esc 不应返回 Cmd")
 	}
@@ -691,14 +682,14 @@ func TestLinuxDoGoBack(t *testing.T) {
 func TestLinuxDoRefresh(t *testing.T) {
 	// 无 cookie → 无 Cmd
 	m := newLinuxdoModel()
-	if _, cmd := m.Update(kp("ctrl+r")); cmd != nil {
+	if cmd := m.Update(kp("ctrl+r")); cmd != nil {
 		t.Error("无 cookie 时 ctrl+r 不应返回 Cmd")
 	}
 
 	// categories
 	m2 := newLinuxdoModel()
 	m2.cookie = "c"
-	_, cmd2 := m2.Update(kp("ctrl+r"))
+	cmd2 := m2.Update(kp("ctrl+r"))
 	if cmd2 == nil {
 		t.Error("categories ctrl+r 应返回 Cmd")
 	}
@@ -712,7 +703,7 @@ func TestLinuxDoRefresh(t *testing.T) {
 	m3.mode = viewTopics
 	m3.topCategory = 2
 	m3.topPage = 1
-	_, cmd3 := m3.Update(kp("ctrl+r"))
+	cmd3 := m3.Update(kp("ctrl+r"))
 	if cmd3 == nil {
 		t.Error("topics ctrl+r 应返回 Cmd")
 	}
@@ -725,7 +716,7 @@ func TestLinuxDoRefresh(t *testing.T) {
 	m4.cookie = "c"
 	m4.mode = viewPosts
 	m4.postTopicID = 9
-	_, cmd4 := m4.Update(kp("ctrl+r"))
+	cmd4 := m4.Update(kp("ctrl+r"))
 	if cmd4 == nil {
 		t.Error("posts ctrl+r 应返回 Cmd")
 	}
@@ -737,7 +728,7 @@ func TestLinuxDoRefresh(t *testing.T) {
 	m5 := newLinuxdoModel()
 	m5.cookie = "c"
 	m5.mode = viewPosts
-	if _, cmd5 := m5.Update(kp("ctrl+r")); cmd5 != nil {
+	if cmd5 := m5.Update(kp("ctrl+r")); cmd5 != nil {
 		t.Error("posts 无 topicID 时 ctrl+r 不应返回 Cmd")
 	}
 
@@ -746,7 +737,7 @@ func TestLinuxDoRefresh(t *testing.T) {
 	m6.cookie = "c"
 	m6.mode = viewSearch
 	m6.searchQuery = "q"
-	_, cmd6 := m6.Update(kp("ctrl+r"))
+	cmd6 := m6.Update(kp("ctrl+r"))
 	if cmd6 == nil {
 		t.Error("search ctrl+r 应返回 Cmd")
 	}
@@ -1054,11 +1045,11 @@ func TestLinuxDoMovePostCursorLoadMore(t *testing.T) {
 	_ = m.View() // 填充 postLineRanges
 
 	// PgDn：postCursor 0→1，超界钳到最后一条(idx0)，且检测到有剩余 stream → 触发加载
-	nm, cmd := m.movePostCursor(1)
+	cmd := m.movePostCursor(1)
 	if cmd == nil {
 		t.Error("到底且有剩余 stream 时 movePostCursor 应返回加载 Cmd")
 	}
-	if !nm.postStreamLoading {
+	if !m.postStreamLoading {
 		t.Error("触发加载后 postStreamLoading 应为 true")
 	}
 	if m.postCursor != 0 {
@@ -1072,7 +1063,7 @@ func TestLinuxDoMovePostCursorLoadMore(t *testing.T) {
 	m2.posts = []Post{{ID: 1, Name: "A", Username: "a", PostNumber: 1, Cooked: "<p>x</p>"}}
 	m2.postStream = nil
 	_ = m2.View()
-	_, cmd2 := m2.movePostCursor(1)
+	cmd2 := m2.movePostCursor(1)
 	if cmd2 != nil {
 		t.Error("无剩余 stream 时 movePostCursor 不应返回 Cmd")
 	}

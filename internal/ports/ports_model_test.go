@@ -64,10 +64,7 @@ func TestPortsUpdatePortsMsg(t *testing.T) {
 	m.loading = true
 
 	// 正常数据
-	nm, _ := m.Update(PortsMsg{Ports: []PortInfo{{Port: 80, Service: "HTTP", Open: true}}})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(PortsMsg{Ports: []PortInfo{{Port: 80, Service: "HTTP", Open: true}}})
 	if len(m.ports) != 1 {
 		t.Errorf("ports = %v, want 1 项", m.ports)
 	}
@@ -126,10 +123,7 @@ func TestPortsUpdateKeyNavigation(t *testing.T) {
 func TestPortsUpdateRefreshAndInput(t *testing.T) {
 	// ctrl+r 刷新
 	m := newPortsModel()
-	nm, cmd := m.Update(kp("ctrl+r"))
-	if nm != m {
-		t.Error("ctrl+r 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Error("ctrl+r 应返回 ScanPortsCmd")
 	}
@@ -142,7 +136,7 @@ func TestPortsUpdateRefreshAndInput(t *testing.T) {
 
 	// / 打开输入框
 	m2 := newPortsModel()
-	_, cmd2 := m2.Update(kp("/"))
+	cmd2 := m2.Update(kp("/"))
 	if cmd2 != nil {
 		t.Error("按 / 不应返回 Cmd")
 	}

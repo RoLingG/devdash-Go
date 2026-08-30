@@ -67,13 +67,57 @@ func (m model) anyInputActive() bool {
 		m.routeMod.InputActive() || m.devtools.InputActive()
 }
 
-// updateForward 执行子模块 Update，把返回的非 nil cmd 追加进 cmds，返回更新后的模块。
-func updateForward[T any](mode T, msg tea.Msg, cmds []tea.Cmd, updateFunc func(T, tea.Msg) (T, tea.Cmd)) (T, []tea.Cmd) {
-	newMode, cmd := updateFunc(mode, msg)
-	if cmd != nil {
-		cmds = append(cmds, cmd)
+// owner 专属异步消息按类型路由到归属模块，与当前 Tab 无关，防止切 Tab 后数据丢失
+func (m model) owner(msg tea.Msg) ui.Module {
+	switch msg.(type) {
+	case git.InfoMsg, git.DirMsg:
+		return m.git
+	case log.LoadMsg, log.DirMsg, log.TailDataMsg:
+		return m.log
+	case weather.Msg:
+		return m.weather
+	case config.LoadMsg, config.DirMsg:
+		return m.config
+	case system.SysInfoMsg, system.ProcMsg:
+		return m.sys
+	case ports.PortsMsg:
+		return m.ports
+	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg, linuxdo.PostStreamMsg, linuxdo.SearchMsg:
+		return m.linuxdo
+	case route.RoutesMsg, route.RouteActionMsg:
+		return m.routeMod
 	}
-	return newMode, cmds
+	return nil
+}
+
+// modules 全部子模块，广播类消息遍历发送
+func (m model) modules() []ui.Module {
+	return []ui.Module{m.git, m.log, m.weather, m.config, m.sys, m.ports, m.linuxdo, m.routeMod, m.devtools}
+}
+
+// active 当前活跃模块，交互消息（按键等）的归属
+func (m model) active() ui.Module {
+	switch m.state {
+	case ui.TabGit:
+		return m.git
+	case ui.TabLog:
+		return m.log
+	case ui.TabWeather:
+		return m.weather
+	case ui.TabConfig:
+		return m.config
+	case ui.TabSystem:
+		return m.sys
+	case ui.TabPorts:
+		return m.ports
+	case ui.TabLinuxDo:
+		return m.linuxdo
+	case ui.TabRoute:
+		return m.routeMod
+	case ui.TabDevTools:
+		return m.devtools
+	}
+	return nil
 }
 
 // Init 应用启动时执行的初始化命令
@@ -153,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sys.UpdateSize(msg.Width, msg.Height)
 		m.ports.UpdateSize(msg.Width, msg.Height)
 		m.linuxdo.UpdateSize(msg.Width, msg.Height)
-		m.routeMod.UpdateSize(msg.Width, msg.Height) // 同步 route 模块尺寸
+		m.routeMod.UpdateSize(msg.Width, msg.Height)
 		m.devtools.UpdateSize(msg.Width, msg.Height)
 		return m, nil
 
@@ -252,71 +296,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// 跨模块消息: 异步加载结果可能在用户切到其他 Tab 后才返回
-	// 必须在顶层拦截，否则当前 Tab 的模块会丢弃这些消息
-	// crossHandled 标记已由跨模块路由处理的消息，避免重复转发给活跃模块
-	crossHandled := false
-	switch msg := msg.(type) {
-	case git.InfoMsg, git.DirMsg:
-		crossHandled = true
-		m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
-	case log.LoadMsg, log.DirMsg, log.TailDataMsg:
-		crossHandled = true
-		m.log, cmds = updateForward(m.log, msg, cmds, (*log.Model).Update)
-	case weather.Msg:
-		crossHandled = true
-		m.weather, cmds = updateForward(m.weather, msg, cmds, (*weather.Model).Update)
-	case config.LoadMsg, config.DirMsg:
-		crossHandled = true
-		m.config, cmds = updateForward(m.config, msg, cmds, (*config.Model).Update)
-	case system.SysInfoMsg, system.ProcMsg:
-		crossHandled = true
-		m.sys, cmds = updateForward(m.sys, msg, cmds, (*system.Model).Update)
-	case ports.PortsMsg:
-		crossHandled = true
-		m.ports, cmds = updateForward(m.ports, msg, cmds, (*ports.Model).Update)
-	case linuxdo.CategoriesMsg, linuxdo.TopicsMsg, linuxdo.TopicDetailMsg, linuxdo.PostStreamMsg, linuxdo.SearchMsg:
-		crossHandled = true
-		m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
-	case route.RoutesMsg, route.RouteActionMsg:
-		crossHandled = true
-		m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
-	// 接收跨模块 bubbles spinner 的加载 Msg
-	case spinner.TickMsg:
-		crossHandled = true
-		m.weather, cmds = updateForward(m.weather, msg, cmds, (*weather.Model).Update)
-		m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
-		m.ports, cmds = updateForward(m.ports, msg, cmds, (*ports.Model).Update)
-		m.sys, cmds = updateForward(m.sys, msg, cmds, (*system.Model).Update)
-		m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
-		m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
+	// 专属异步消息按类型路由到归属模块，与当前 Tab 无关，防止切 Tab 后数据丢失
+	if mod := m.owner(msg); mod != nil {
+		if cmd := mod.Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return m, tea.Batch(cmds...)
 	}
 
-	// 把消息转发给当前激活的子模块处理
-	// 跨模块消息已由上方处理，不再重复转发（避免 tea.Tick 等消息被处理两次导致指数累积）
-	if !crossHandled {
-		switch m.state {
-		case ui.TabGit:
-			m.git, cmds = updateForward(m.git, msg, cmds, (*git.Model).Update)
-		case ui.TabLog:
-			m.log, cmds = updateForward(m.log, msg, cmds, (*log.Model).Update)
-		case ui.TabWeather:
-			m.weather, cmds = updateForward(m.weather, msg, cmds, (*weather.Model).Update)
-		case ui.TabConfig:
-			m.config, cmds = updateForward(m.config, msg, cmds, (*config.Model).Update)
-		case ui.TabSystem:
-			m.sys, cmds = updateForward(m.sys, msg, cmds, (*system.Model).Update)
-		case ui.TabPorts:
-			m.ports, cmds = updateForward(m.ports, msg, cmds, (*ports.Model).Update)
-		case ui.TabLinuxDo:
-			m.linuxdo, cmds = updateForward(m.linuxdo, msg, cmds, (*linuxdo.Model).Update)
-		case ui.TabRoute:
-			m.routeMod, cmds = updateForward(m.routeMod, msg, cmds, (*route.Model).Update)
-		case ui.TabDevTools:
-			m.devtools, cmds = updateForward(m.devtools, msg, cmds, (*devtools.Model).Update)
+	// spinner 心跳广播给全部模块，未实现 spinner 的模块自然忽略
+	if _, ok := msg.(spinner.TickMsg); ok {
+		for _, mod := range m.modules() {
+			if cmd := mod.Update(msg); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
+	}
+
+	// 其余消息交给当前活跃模块
+	if mod := m.active(); mod != nil {
+		if cmd := mod.Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 	}
-
 	return m, tea.Batch(cmds...)
 }
 
@@ -340,27 +343,10 @@ func (m model) View() tea.View {
 
 	tabBar := ui.RenderTabBar(m.state, m.width)
 
-	// 根据当前 Tab 渲染对应模块
+	// 渲染当前活跃模块
 	var content string
-	switch m.state {
-	case ui.TabGit:
-		content = m.git.View()
-	case ui.TabLog:
-		content = m.log.View()
-	case ui.TabWeather:
-		content = m.weather.View()
-	case ui.TabConfig:
-		content = m.config.View()
-	case ui.TabSystem:
-		content = m.sys.View()
-	case ui.TabPorts:
-		content = m.ports.View()
-	case ui.TabLinuxDo:
-		content = m.linuxdo.View()
-	case ui.TabRoute:
-		content = m.routeMod.View()
-	case ui.TabDevTools:
-		content = m.devtools.View()
+	if mod := m.active(); mod != nil {
+		content = mod.View()
 	}
 
 	// 帮助面板覆盖在主内容上

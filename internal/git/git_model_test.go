@@ -79,10 +79,7 @@ func TestGitUpdateInfoMsg(t *testing.T) {
 		Current:  "main",
 		Commits:  []Commit{{Hash: "abc", Author: "A", Date: "2026-08-01", Message: "fix"}},
 	}
-	nm, _ := m.Update(InfoMsg(info))
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	m.Update(InfoMsg(info))
 	if !m.loaded {
 		t.Error("InfoMsg 后 loaded 应为 true")
 	}
@@ -107,10 +104,7 @@ func TestGitUpdateDirMsg(t *testing.T) {
 	m := newGitModel()
 
 	// 有仓库 → 进入目录列表模式
-	nm, cmd := m.Update(DirMsg{Dir: "/repo", Repos: []string{"a", "b"}})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(DirMsg{Dir: "/repo", Repos: []string{"a", "b"}})
 	if cmd != nil {
 		t.Error("DirMsg 有仓库时不应返回 Cmd")
 	}
@@ -125,10 +119,7 @@ func TestGitUpdateDirMsg(t *testing.T) {
 	m2 := newGitModel()
 	m2.input.Active = true
 	m2.dirListing = true
-	nm2, cmd2 := m2.Update(DirMsg{Dir: "/empty", Repos: nil})
-	if nm2 != m2 {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd2 := m2.Update(DirMsg{Dir: "/empty", Repos: nil})
 	if cmd2 != nil {
 		t.Error("无仓库时不应返回 Cmd")
 	}
@@ -158,10 +149,7 @@ func TestGitUpdateKeyDirListing(t *testing.T) {
 	}
 
 	// enter → 选中仓库加载
-	nm, cmd := m.Update(kp("enter"))
-	if nm != m {
-		t.Error("enter 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("enter"))
 	if cmd == nil {
 		t.Error("enter 应返回 Batch Cmd（加载 + 更新配置）")
 	}
@@ -224,10 +212,7 @@ func TestGitUpdateKeyNavigation(t *testing.T) {
 func TestGitUpdateOpenInput(t *testing.T) {
 	m := newGitModel()
 	m.repoPath = "/repo"
-	nm, cmd := m.Update(kp("/"))
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("/"))
 	if cmd != nil {
 		t.Error("打开输入框不应返回 Cmd")
 	}
@@ -243,10 +228,7 @@ func TestGitUpdateRefresh(t *testing.T) {
 	// ctrl+r 刷新（repoPath 非空且缓存未命中 → 返回加载 Cmd）
 	m := newGitModel()
 	m.repoPath = "."
-	nm, cmd := m.Update(kp("ctrl+r"))
-	if nm != m {
-		t.Error("ctrl+r 应返回同一 Model 指针")
-	}
+	cmd := m.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Error("ctrl+r 应返回加载 Cmd")
 	}
@@ -259,7 +241,7 @@ func TestGitUpdateRefresh(t *testing.T) {
 
 	// repoPath 为空 → 不返回 Cmd
 	m2 := newGitModel()
-	if _, cmd := m2.Update(kp("ctrl+r")); cmd != nil {
+	if cmd := m2.Update(kp("ctrl+r")); cmd != nil {
 		t.Error("repoPath 为空时 ctrl+r 不应返回 Cmd")
 	}
 }

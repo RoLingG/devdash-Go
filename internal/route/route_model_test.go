@@ -86,10 +86,7 @@ func TestRouteUpdateRoutesMsg(t *testing.T) {
 	m := newRouteModel()
 	routes := []RouteEntry{{Dest: "10.0.0.0", PrefixLen: 8, NextHop: "10.0.0.1", Metric: 1, IfIndex: 1, IfName: "eth0", IsStatic: true}}
 	ifaces := []IfaceInfo{{Index: 1, Name: "eth0"}}
-	nm, cmd := m.Update(RoutesMsg{Routes: routes, Ifaces: ifaces})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(RoutesMsg{Routes: routes, Ifaces: ifaces})
 	if cmd != nil {
 		t.Error("RoutesMsg 不应返回 Cmd")
 	}
@@ -105,7 +102,7 @@ func TestRouteUpdateRoutesMsg(t *testing.T) {
 
 	// 错误 → 显示错误
 	m2 := newRouteModel()
-	_, cmd2 := m2.Update(RoutesMsg{Err: errRoute})
+	cmd2 := m2.Update(RoutesMsg{Err: errRoute})
 	if cmd2 == nil {
 		t.Error("RoutesMsg 带错误时应返回 err Cmd")
 	}
@@ -120,10 +117,7 @@ func TestRouteUpdateRoutesMsg(t *testing.T) {
 func TestRouteUpdateClearMsg(t *testing.T) {
 	m := newRouteModel()
 	m.msg = "hello"
-	nm, cmd := m.Update(clearMsgMsg{})
-	if nm != m {
-		t.Error("Update 应返回同一 Model 指针")
-	}
+	cmd := m.Update(clearMsgMsg{})
 	if cmd != nil {
 		t.Error("clearMsgMsg 不应返回 Cmd")
 	}
@@ -135,7 +129,7 @@ func TestRouteUpdateClearMsg(t *testing.T) {
 func TestRouteUpdateActionMsg(t *testing.T) {
 	// 添加成功
 	m := newRouteModel()
-	_, cmd := m.Update(RouteActionMsg{OK: true, IsAdd: true})
+	cmd := m.Update(RouteActionMsg{OK: true, IsAdd: true})
 	if cmd == nil {
 		t.Fatal("RouteActionMsg 成功应返回刷新 Cmd")
 	}
@@ -148,7 +142,7 @@ func TestRouteUpdateActionMsg(t *testing.T) {
 
 	// 删除成功
 	m2 := newRouteModel()
-	_, cmd2 := m2.Update(RouteActionMsg{OK: true, IsAdd: false})
+	cmd2 := m2.Update(RouteActionMsg{OK: true, IsAdd: false})
 	if cmd2 == nil {
 		t.Fatal("RouteActionMsg 删除成功应返回刷新 Cmd")
 	}
@@ -158,7 +152,7 @@ func TestRouteUpdateActionMsg(t *testing.T) {
 
 	// 错误
 	m3 := newRouteModel()
-	_, cmd3 := m3.Update(RouteActionMsg{Err: errRoute, IsAdd: true})
+	cmd3 := m3.Update(RouteActionMsg{Err: errRoute, IsAdd: true})
 	if cmd3 == nil {
 		t.Error("RouteActionMsg 错误应返回 err Cmd")
 	}
@@ -171,7 +165,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+r 刷新
 	m := newRouteModel()
 	m.loading = false
-	_, cmd := m.Update(kp("ctrl+r"))
+	cmd := m.Update(kp("ctrl+r"))
 	if cmd == nil {
 		t.Fatal("ctrl+r 应返回 Cmd")
 	}
@@ -199,7 +193,7 @@ func TestRouteHandleKey(t *testing.T) {
 	m3 := newRouteModel()
 	m3.isAdmin = true
 	m3.ifaces = []IfaceInfo{{Index: 1, Name: "eth0"}}
-	_, cmd3 := m3.Update(kp("ctrl+a"))
+	cmd3 := m3.Update(kp("ctrl+a"))
 	if cmd3 != nil {
 		t.Error("ctrl+a 不应返回 Cmd")
 	}
@@ -210,7 +204,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+a 非管理员 → 错误
 	m4 := newRouteModel()
 	m4.isAdmin = false
-	_, cmd4 := m4.Update(kp("ctrl+a"))
+	cmd4 := m4.Update(kp("ctrl+a"))
 	if cmd4 == nil {
 		t.Fatal("ctrl+a 非管理员应返回 err Cmd")
 	}
@@ -221,7 +215,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+d 非管理员 → 错误
 	m5 := newRouteModel()
 	m5.isAdmin = false
-	_, cmd5 := m5.Update(kp("ctrl+d"))
+	cmd5 := m5.Update(kp("ctrl+d"))
 	if cmd5 == nil {
 		t.Fatal("ctrl+d 非管理员应返回 err Cmd")
 	}
@@ -232,7 +226,7 @@ func TestRouteHandleKey(t *testing.T) {
 	m6.mode = viewRoutes
 	m6.routes = []RouteEntry{{Dest: "10.0.0.0", PrefixLen: 8, NextHop: "10.0.0.1", IfIndex: 1, IsStatic: true}}
 	m6.cursor = 0
-	_, cmd6 := m6.Update(kp("ctrl+d"))
+	cmd6 := m6.Update(kp("ctrl+d"))
 	if cmd6 == nil {
 		t.Fatal("ctrl+d 静态路由应返回删除 Cmd")
 	}
@@ -243,7 +237,7 @@ func TestRouteHandleKey(t *testing.T) {
 	m6b.mode = viewRoutes
 	m6b.routes = []RouteEntry{{Dest: "0.0.0.0", PrefixLen: 0}}
 	m6b.cursor = 0
-	_, cmd6b := m6b.Update(kp("ctrl+d"))
+	cmd6b := m6b.Update(kp("ctrl+d"))
 	if cmd6b == nil {
 		t.Fatal("ctrl+d 默认路由应返回 err Cmd")
 	}
@@ -254,7 +248,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+s 保存静态路由
 	m7 := newRouteModel()
 	m7.routes = []RouteEntry{{Dest: "10.0.0.0", PrefixLen: 8, NextHop: "10.0.0.1", Metric: 1, IfIndex: 1, IfName: "eth0", IsStatic: true}}
-	_, cmd7 := m7.Update(kp("ctrl+s"))
+	cmd7 := m7.Update(kp("ctrl+s"))
 	if cmd7 == nil {
 		t.Fatal("ctrl+s 应返回 Batch Cmd")
 	}
@@ -268,7 +262,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+s 无静态路由 → 错误
 	m7b := newRouteModel()
 	m7b.routes = []RouteEntry{{Dest: "10.0.0.0", PrefixLen: 8, IsStatic: false}}
-	_, cmd7b := m7b.Update(kp("ctrl+s"))
+	cmd7b := m7b.Update(kp("ctrl+s"))
 	if cmd7b == nil {
 		t.Fatal("ctrl+s 无静态路由应返回 err Cmd")
 	}
@@ -279,7 +273,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+l 非管理员 → 错误
 	m8 := newRouteModel()
 	m8.isAdmin = false
-	_, cmd8 := m8.Update(kp("ctrl+l"))
+	cmd8 := m8.Update(kp("ctrl+l"))
 	if cmd8 == nil {
 		t.Fatal("ctrl+l 非管理员应返回 err Cmd")
 	}
@@ -291,7 +285,7 @@ func TestRouteHandleKey(t *testing.T) {
 	m9 := newRouteModel()
 	m9.isAdmin = true
 	m9.savedRoutes = []ui.RouteConfig{{Dest: "10.0.0.0", PrefixLen: 8, NextHop: "10.0.0.1"}}
-	_, cmd9 := m9.Update(kp("ctrl+l"))
+	cmd9 := m9.Update(kp("ctrl+l"))
 	if cmd9 == nil {
 		t.Fatal("ctrl+l 有保存路由应返回 Cmd")
 	}
@@ -299,7 +293,7 @@ func TestRouteHandleKey(t *testing.T) {
 	// ctrl+l 管理员 + 无保存路由 → 错误
 	m9b := newRouteModel()
 	m9b.isAdmin = true
-	_, cmd9b := m9b.Update(kp("ctrl+l"))
+	cmd9b := m9b.Update(kp("ctrl+l"))
 	if cmd9b == nil {
 		t.Fatal("ctrl+l 无保存路由应返回 err Cmd")
 	}
@@ -362,7 +356,7 @@ func TestRouteAddOverlayKeys(t *testing.T) {
 	// esc 关闭
 	m := newRouteModel()
 	m.addOverlay = true
-	_, cmd := m.Update(kp("esc"))
+	cmd := m.Update(kp("esc"))
 	if cmd != nil {
 		t.Error("esc 不应返回 Cmd")
 	}
@@ -416,7 +410,7 @@ func TestRouteSubmitAdd(t *testing.T) {
 	m := newRouteModel()
 	m.addOverlay = true
 	m.addDest = "not-an-ip"
-	_, cmd := m.Update(kp("enter"))
+	cmd := m.Update(kp("enter"))
 	if cmd == nil {
 		t.Fatal("无效地址应返回 err Cmd")
 	}
@@ -433,7 +427,7 @@ func TestRouteSubmitAdd(t *testing.T) {
 	m2.addDest = "10.0.0.0"
 	m2.addMask = "bad"
 	m2.addGateway = "10.0.0.1"
-	_, cmd2 := m2.Update(kp("enter"))
+	cmd2 := m2.Update(kp("enter"))
 	if cmd2 == nil || !m2.msgIsErr {
 		t.Error("无效掩码应返回 err Cmd")
 	}
@@ -446,7 +440,7 @@ func TestRouteSubmitAdd(t *testing.T) {
 	m3.addGateway = "10.0.0.1"
 	m3.ifaces = []IfaceInfo{{Index: 5, Name: "eth0"}}
 	m3.addIfIdx = 0
-	_, cmd3 := m3.Update(kp("enter"))
+	cmd3 := m3.Update(kp("enter"))
 	if cmd3 == nil {
 		t.Fatal("有效输入应返回 AddRoute Cmd")
 	}
