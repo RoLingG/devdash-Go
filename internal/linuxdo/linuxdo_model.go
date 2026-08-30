@@ -922,21 +922,22 @@ func (m *Model) viewTopics(cardWidth int) string {
 			prefix = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸  ")
 		}
 
-		// 标题（截断到卡片宽度）
+		// 标题（按显示宽度截断到卡片内，中文每字 2 列，Truncate 自带省略号，外层不再追加）
 		titleText := t.Title
 		maxTitleW := cardWidth - 20
+
 		if maxTitleW < 10 {
 			maxTitleW = 10
 		}
-		if ui.RuneLen(titleText) > maxTitleW {
-			titleText = ui.Truncate(titleText, maxTitleW-1) + "…"
+
+		if lipgloss.Width(titleText) > maxTitleW {
+			titleText = ui.Truncate(titleText, maxTitleW-10) // -10 长度避免添加后续文本导致超长换行
 		}
 		title := lipgloss.NewStyle().Foreground(ui.ColText).Render(titleText)
 
 		// 元信息
 		meta := lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
 			fmt.Sprintf("  💬 %d  👀 %d", t.PostsCount, t.Views))
-
 		// 置顶标记
 		pin := ""
 		if t.Pinned {
