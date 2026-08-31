@@ -39,6 +39,12 @@ type Topic struct {
 	Pinned     bool   `json:"pinned"`
 	Closed     bool   `json:"closed"`
 	CategoryID int    `json:"category_id"`
+	Tags       []Tag  `json:"tags"`
+}
+
+// Tag 话题标签，API 返回对象数组（带 id/name/slug，目前只用 name）
+type Tag struct {
+	Name string `json:"name"`
 }
 
 type Post struct {

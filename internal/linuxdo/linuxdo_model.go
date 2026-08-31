@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/lucasb-eyer/go-colorful"
 	"github.com/mattn/go-sixel"
 
 	"cava_go/internal/component"
@@ -53,7 +54,8 @@ type Model struct {
 
 	// 帖子列表
 	topics      []Topic
-	topCursor   int
+	topCursor   int // 当前话题索引（Enter 进入、▸ 指示基于此）
+	topScroll   int // 渲染起始行偏移，光标条完整可见驱动滚动
 	topLoading  bool
 	topErr      error
 	topTitle    string // 当前分类名或 "Latest"
@@ -627,6 +629,7 @@ func (m *Model) enterSelected() tea.Cmd {
 		m.mode = viewTopics
 		m.topPage = 0
 		m.topCursor = 0
+		m.topScroll = 0
 		m.topLoading = true
 		m.topErr = nil
 		m.topFullPage = false
@@ -882,6 +885,32 @@ func (m *Model) viewCategories(cardWidth int) string {
 	return ui.Card(title, sb.String(), ui.ColAccent, cardWidth)
 }
 
+// hexToANSI256 将 colorful 颜色量化到 ANSI-256 调色板，返回 lipgloss 可用的色号
+// Discourse 分类色是任意 RGB，量化后在不支持 truecolor 的终端也能保真显示
+func hexToANSI256(c colorful.Color) string {
+	r, g, b := c.R*255, c.G*255, c.B*255
+	// 6×6×6 色立方（16-231 号）：每通道量化到 0-5
+	q := func(v float64) int {
+		if v < 48 {
+			return 0
+		}
+		if v < 115 {
+			return 1
+		}
+		return int((v-35)/40.46875) + 2 // 量化到 2-5，覆盖 115-255
+	}
+	cube := 36*q(r) + 6*q(g) + q(b)
+	// 灰阶带（232-255 号）：三通道接近时更准，8 色灰阶误差更小
+	if q(r) == q(g) && q(g) == q(b) {
+		gray := 232 + int((r+g+b)/3/10.5)
+		if gray > 255 {
+			gray = 255
+		}
+		return fmt.Sprintf("%d", gray)
+	}
+	return fmt.Sprintf("%d", 16+cube)
+}
+
 func (m *Model) viewTopics(cardWidth int) string {
 	if m.topLoading {
 		return ui.Card(m.topTitle, lipgloss.NewStyle().Foreground(ui.ColAccent).Render(m.spinner.View()+"  Loading topics..."), ui.ColAccent, cardWidth)
@@ -895,60 +924,120 @@ func (m *Model) viewTopics(cardWidth int) string {
 		return ui.Card(m.topTitle, lipgloss.NewStyle().Foreground(ui.ColMuted).Render("  No topics"), ui.ColMuted, cardWidth)
 	}
 
+	// 行级滚动窗口：渲染光标前后一批话题铺成行数组，窗口按行切割，
+	// 尾部零头行露出下一条开头，光标条完整可见驱动 topScroll 滚动
 	viewH := m.height - 7
 	if viewH < 3 {
 		viewH = 3
 	}
 
 	total := len(m.topics)
-	start := m.topCursor - viewH/2
-	if start < 0 {
-		start = 0
+	// 渲染范围取光标前后各扩一屏的话题量，行数必然覆盖一整窗
+	itemRows := 3 // 每条 3 行：标题 + meta + 分隔条
+	// 起始话题下标
+	renderStart := m.topCursor - viewH/itemRows - 1
+	if renderStart < 0 {
+		renderStart = 0
 	}
-	end := start + viewH
-	if end > total {
-		end = total
-		start = end - viewH
-		if start < 0 {
-			start = 0
-		}
+	// 结束话题下标
+	renderEnd := m.topCursor + viewH/itemRows + 2
+	if renderEnd > total {
+		renderEnd = total
 	}
 
-	var sb strings.Builder
-	for i := start; i < end; i++ {
+	// 分类 ID → 名称/颜色反查表，第二行徽章用官方分类色
+	catMap := make(map[int]Category, len(m.categories))
+	for _, c := range m.categories {
+		catMap[c.ID] = c
+	}
+
+	var lines []string
+	var itemRanges [][2]int // 话题 [起始行,结束行)，光标条可见性判断用
+	for i := renderStart; i < renderEnd; i++ {
 		t := m.topics[i]
+		startLine := len(lines)
+
+		// 第一行：光标 + 标题 + 置顶标记
 		prefix := "  "
 		if i == m.topCursor {
-			prefix = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸  ")
+			prefix = lipgloss.NewStyle().Foreground(ui.ColAccent).Render("▸ ")
 		}
-
-		// 标题（按显示宽度截断到卡片内，中文每字 2 列，Truncate 自带省略号，外层不再追加）
 		titleText := t.Title
-		maxTitleW := cardWidth - 20
-
+		maxTitleW := cardWidth - 10
 		if maxTitleW < 10 {
 			maxTitleW = 10
 		}
-
 		if lipgloss.Width(titleText) > maxTitleW {
-			titleText = ui.Truncate(titleText, maxTitleW-10) // -10 长度避免添加后续文本导致超长换行
+			titleText = ui.Truncate(titleText, maxTitleW)
 		}
-		title := lipgloss.NewStyle().Foreground(ui.ColText).Render(titleText)
-
-		// 元信息
-		meta := lipgloss.NewStyle().Foreground(ui.ColMuted).Render(
-			fmt.Sprintf("  💬 %d  👀 %d", t.PostsCount, t.Views))
-		// 置顶标记
-		pin := ""
 		if t.Pinned {
-			pin = lipgloss.NewStyle().Foreground(ui.ColAccent).Render(" 📌")
+			titleText += " 📌"
+		}
+		lines = append(lines, prefix+lipgloss.NewStyle().Foreground(ui.ColText).Render(titleText))
+
+		// 第二行：分类徽章 + tags + 💬👀，整体缩进 2 列与标题对齐
+		var parts []string
+		if cat, ok := catMap[t.CategoryID]; ok {
+			badgeStyle := lipgloss.NewStyle()
+			if c, err := colorful.Hex(cat.Color); err == nil {
+				badgeStyle = badgeStyle.Foreground(lipgloss.Color(hexToANSI256(c)))
+			}
+			parts = append(parts, badgeStyle.Render(cat.Name))
+		}
+		tagStyle := lipgloss.NewStyle().Foreground(ui.ColMuted)
+		for _, tag := range t.Tags {
+			parts = append(parts, tagStyle.Render(tag.Name))
+		}
+		metaStyle := lipgloss.NewStyle().Foreground(ui.ColMuted)
+		parts = append(parts, metaStyle.Render(fmt.Sprintf("💬 %d  👀 %d", t.PostsCount, t.Views)))
+		lines = append(lines, "  "+strings.Join(parts, "  "))
+
+		// 条目间分隔条，贴卡片内容区宽度（Card 内左右各 2 列边距）
+		if i < renderEnd-1 {
+			lines = append(lines, lipgloss.NewStyle().Foreground(ui.ColMuted).Render(strings.Repeat("─", cardWidth-4)))
 		}
 
-		sb.WriteString(prefix + title + pin + meta + "\n")
+		itemRanges = append(itemRanges, [2]int{startLine, len(lines)})
+	}
+
+	// 光标条完整可见调整 topScroll：光标条的行区间是 [cStart,cEnd)
+	var cStart, cEnd int
+	if idx := m.topCursor - renderStart; idx >= 0 && idx < len(itemRanges) {
+		cStart, cEnd = itemRanges[idx][0], itemRanges[idx][1]
+	}
+	// 光标条滑出窗口上方则上滚
+	if cEnd > m.topScroll+viewH {
+		m.topScroll = cEnd - viewH
+	}
+	// 光标条滑出窗口下方则下滚
+	if cStart < m.topScroll {
+		m.topScroll = cStart
+	}
+	// 列表头部或尾部时窗口贴边，避免顶部留空或尾部越界
+	if m.topScroll < 0 {
+		m.topScroll = 0
+	}
+	if maxScroll := len(lines) - viewH; m.topScroll > maxScroll {
+		m.topScroll = maxScroll
+	}
+	if m.topScroll < 0 {
+		m.topScroll = 0
+	}
+
+	// 按行切割窗口
+	endLine := m.topScroll + viewH
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+	visible := strings.Join(lines[m.topScroll:endLine], "\n")
+
+	// 不足一屏补空行，让卡片边框贴满可视高度
+	for l := endLine - m.topScroll; l < viewH; l++ {
+		visible += "\n"
 	}
 
 	title := fmt.Sprintf("%s (%d)", m.topTitle, total)
-	return ui.Card(title, strings.TrimRight(sb.String(), "\n"), ui.ColAccent, cardWidth)
+	return ui.Card(title, visible, ui.ColAccent, cardWidth)
 }
 
 func (m *Model) viewPosts(cardWidth int) string {
